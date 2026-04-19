@@ -18,6 +18,8 @@ from cce_core.compression.merger import Merger, MemoryNode
 from cce_core.memory.store import MemoryStore
 from cce_core.retrieval.retriever import Retriever, RetrievalResult
 from cce_core.retrieval.context_builder import ContextBuilder, ContextPayload
+from cce_core.session.manager import SessionManager
+from cce_core.session.stateless import StatelessProcessor, StatelessResult
 
 
 class CCEEngine:
@@ -263,6 +265,32 @@ class CCEEngine:
         """
         payload = self.build_context(store, user_message, fmt=fmt)
         return payload.export(fmt), payload
+
+    # ── Phase 4: Session management ───────────────────────────────────────────
+
+    def create_session_manager(self) -> SessionManager:
+        """
+        Create a SessionManager backed by this engine.
+        The manager handles multi-session lifecycle, routing, and checkpointing.
+
+        Usage:
+            manager = engine.create_session_manager()
+            manager.add_message("session-abc", {"role": "user", "content": "hello"})
+            context = manager.build_context("session-abc", "hello")
+            manager.close("session-abc")
+        """
+        return SessionManager(self)
+
+    def create_stateless_processor(self) -> StatelessProcessor:
+        """
+        Create a StatelessProcessor for on-demand, zero-persistence compression.
+
+        Usage:
+            processor = engine.create_stateless_processor()
+            result = processor.process(messages, query="what did we discuss?")
+            llm_messages = result.to_messages()
+        """
+        return StatelessProcessor(self)
 
     # ── Diagnostics ───────────────────────────────────────────────────────────
 
