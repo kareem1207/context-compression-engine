@@ -75,7 +75,7 @@ def _extract_completion_fields(data: dict) -> tuple[str, str, dict]:
     return content, finish_reason, meta
 
 
-def call_gemma(messages: list[dict], endpoint: str = "http://localhost:8080/v1") -> str:
+def call_gemma(messages: list[dict], endpoint: str = "http://localhost:8080/v1") -> tuple[str, dict]:
     try:
         with httpx.Client(timeout=300.0) as client:
             resp = client.post(
@@ -89,20 +89,17 @@ def call_gemma(messages: list[dict], endpoint: str = "http://localhost:8080/v1")
             )
             resp.raise_for_status()
             data = resp.json()
-            choices = data.get("choices", [])
-            if not choices:
-                return f"[No choices: {data}]"
-            content = choices[0].get("message", {}).get("content", "").strip()
-            finish = choices[0].get("finish_reason", "?")
-            usage = data.get("usage", {})
-            meta = f"finish={finish}, tokens={usage.get('completion_tokens','?')}"
-            return f"{content}\n    Meta: {meta}" if content else f"[Empty]\n    Meta: {meta}"
+            content, _, meta = _extract_completion_fields(data)
+            meta["attempt"] = 1
+            if not content.strip():
+                return "[Empty]", meta
+            return content.strip(), meta
     except httpx.ConnectError:
-        return "[llama.cpp not running]"
+        return "[llama.cpp not running]", {"attempt": 1, "finish_reason": "connect_error"}
     except httpx.TimeoutException:
-        return "[Timed out]"
+        return "[Timed out]", {"attempt": 1, "finish_reason": "timeout"}
     except Exception as e:
-        return f"[Error: {e}]"
+        return f"[Error: {e}]", {"attempt": 1, "finish_reason": "error"}
     
 def main():
     print("=" * 60)
