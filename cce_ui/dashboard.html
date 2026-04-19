@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>CCE Dashboard</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;500;700&display=swap');
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        :root {
+            --bg: #0c0e12;
+            --bg2: #111418;
+            --bg3: #181c23;
+            --bg4: #1e232c;
+            --border: #1e2530;
+            --border2: #252d3a;
+            --text: #dde3f0;
+            --muted: #5c6880;
+            --dim: #2a3040;
+            --blue: #4f9eff;
+            --purple: #8b7fff;
+            --green: #34d399;
+            --amber: #fbbf24;
+            --red: #f87171;
+            --font: 'Syne', sans-serif;
+            --mono: 'JetBrains Mono', monospace;
+        }
+
+        html,
+        body {
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font);
+            overflow: hidden
+        }
+
+        body {
+            display: flex;
+            flex-direction: column
+        }
+
+        /* HEADER */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 18px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg2);
+            flex-shrink: 0
+        }
+
+        .hlogo {
+            display: flex;
+            align-items: center;
+            gap: 10px
+        }
+
+        .hpulse {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--red);
+            transition: all .3s
+        }
+
+        .hpulse.on {
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green)
+        }
+
+        .htitle {
+            font-size: 13px;
+            font-weight: 700
+        }
+
+        .hsub {
+            font-size: 10px;
+            color: var(--muted);
+            font-family: var(--mono)
+        }
+
+        .hright {
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .hbtn {
+            padding: 6px 14px;
+            border-radius: 7px;
+            border: 1px solid var(--border2);
+            background: transparent;
+            color: var(--muted);
+            font-size: 11px;
+            font-family: var(--font);
+            cursor: pointer;
+            transition: all .15s
+        }
+
+        .hbtn:hover {
+            color: var(--text);
+            border-color: var(--text)
+        }
+
+        .hbtn.primary {
+            border-color: var(--blue);
+            color: var(--blue);
+            background: rgba(79, 158, 255, .08)
+        }
+
+        .hbtn.primary:hover {
+            background: var(--blue);
+            color: #000
+        }
+
+        .hbtn.primary:disabled {
+            opacity: .4;
+            cursor: default;
+            background: transparent
+        }
+
+        .hbtn.danger:hover {
+            color: var(--red);
+            border-color: var(--red)
+        }
+
+        .hstatus {
+            font-size: 10px;
+            font-family: var(--mono);
+            color: var(--muted)
+        }
+
+        /* PROGRESS BAR (sim) */
+        .sim-bar {
+            height: 2px;
+            background: var(--border);
+            flex-shrink: 0;
+            overflow: hidden
+        }
+
+        .sim-fill {
+            height: 100%;
+            background: var(--blue);
+            width: 0%;
+            transition: width .3s ease
+        }
+
+        /* MAIN */
+        .main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            gap: 1px;
+            background: var(--border)
+        }
+
+        /* LEFT — chat */
+        .chat-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg);
+            min-width: 0
+        }
+
+        .col-hdr {
+            padding: 9px 14px;
+            border-bottom: 1px solid var(--border);
+            font-size: 10px;
+            font-family: var(--mono);
+            color: var(--muted);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0
+        }
+
+        .msgs {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px
+        }
+
+        .msgs::-webkit-scrollbar {
+            width: 3px
+        }
+
+        .msgs::-webkit-scrollbar-thumb {
+            background: var(--border2);
+            border-radius: 2px
+        }
+
+        .msg {
+            display: flex;
+            gap: 9px;
+            animation: fadeUp .25s ease
+        }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(5px)
+            }
+
+            to {
+                opacity: 1;
+                transform: none
+            }
+        }
+
+        .msg.user {
+            flex-direction: row-reverse
+        }
+
+        .av {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            font-weight: 700;
+            flex-shrink: 0;
+            font-family: var(--mono)
+        }
+
+        .msg.user .av {
+            background: var(--blue);
+            color: #000
+        }
+
+        .msg.assistant .av {
+            background: var(--bg4);
+            color: var(--purple);
+            border: 1px solid var(--border2)
+        }
+
+        .bubble {
+            max-width: 80%;
+            padding: 9px 13px;
+            border-radius: 12px;
+            font-size: 13px;
+            line-height: 1.65
+        }
+
+        .msg.user .bubble {
+            background: var(--blue);
+            color: #000;
+            border-radius: 12px 3px 12px 12px
+        }
+
+        .msg.assistant .bubble {
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 3px 12px 12px 12px
+        }
+
+        .msg.simulated .bubble {
+            opacity: .75
+        }
+
+        .typing {
+            display: flex;
+            gap: 4px;
+            padding: 9px 13px
+        }
+
+        .typing span {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--muted);
+            animation: blink 1.2s infinite
+        }
+
+        .typing span:nth-child(2) {
+            animation-delay: .2s
+        }
+
+        .typing span:nth-child(3) {
+            animation-delay: .4s
+        }
+
+        @keyframes blink {
+
+            0%,
+            80%,
+            100% {
+                opacity: .2
+            }
+
+            40% {
+                opacity: 1
+            }
+        }
+
+        .chat-foot {
+            padding: 10px 14px;
+            border-top: 1px solid var(--border);
+            background: var(--bg2);
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0
+        }
+
+        .cinp {
+            flex: 1;
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            border-radius: 8px;
+            padding: 9px 13px;
+            font-size: 13px;
+            color: var(--text);
+            font-family: var(--font);
+            outline: none;
+            resize: none;
+            line-height: 1.5;
+            max-height: 100px
+        }
+
+        .cinp:focus {
+            border-color: var(--blue)
+        }
+
+        .cinp::placeholder {
+            color: var(--muted)
+        }
+
+        .cinp:disabled {
+            opacity: .5
+        }
+
+        .sbtn {
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
+            background: var(--blue);
+            border: none;
+            cursor: pointer;
+            color: #000;
+            font-size: 17px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all .15s
+        }
+
+        .sbtn:hover {
+            background: #6fb3ff
+        }
+
+        .sbtn:disabled {
+            background: var(--border2);
+            color: var(--muted);
+            cursor: default
+        }
+
+        /* RIGHT — tabs */
+        .right-col {
+            width: 430px;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg);
+            flex-shrink: 0
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0
+        }
+
+        .tab {
+            flex: 1;
+            padding: 9px 4px;
+            text-align: center;
+            font-size: 10px;
+            font-family: var(--mono);
+            color: var(--muted);
+            cursor: pointer;
+            letter-spacing: .6px;
+            text-transform: uppercase;
+            border-bottom: 2px solid transparent;
+            transition: all .15s
+        }
+
+        .tab.on {
+            color: var(--text);
+            border-bottom-color: var(--blue)
+        }
+
+        .tp {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            flex-direction: column;
+            gap: 7px
+        }
+
+        .tp.on {
+            display: flex
+        }
+
+        .tp::-webkit-scrollbar {
+            width: 3px
+        }
+
+        .tp::-webkit-scrollbar-thumb {
+            background: var(--border2);
+            border-radius: 2px
+        }
+
+        .empty {
+            color: var(--muted);
+            font-size: 11px;
+            text-align: center;
+            padding: 24px;
+            font-family: var(--mono);
+            line-height: 1.7
+        }
+
+        /* LOG */
+        .log-item {
+            display: flex;
+            gap: 9px;
+            align-items: flex-start;
+            animation: fadeUp .2s ease
+        }
+
+        .ldot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            margin-top: 4px;
+            flex-shrink: 0
+        }
+
+        .d-info {
+            background: var(--muted)
+        }
+
+        .d-ok {
+            background: var(--green)
+        }
+
+        .d-warn {
+            background: var(--amber);
+            animation: blink .8s infinite
+        }
+
+        .d-err {
+            background: var(--red)
+        }
+
+        .ltext {
+            font-size: 11px;
+            font-family: var(--mono);
+            color: var(--muted);
+            line-height: 1.6;
+            flex: 1
+        }
+
+        .ltext b {
+            color: var(--text);
+            font-weight: 500
+        }
+
+        .ret-box {
+            margin-top: 5px;
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            border-radius: 6px;
+            padding: 7px 9px
+        }
+
+        .ret-row {
+            font-size: 10px;
+            font-family: var(--mono);
+            color: var(--muted);
+            margin-bottom: 2px
+        }
+
+        .ret-row b {
+            color: var(--green)
+        }
+
+        /* MEMORY */
+        .tier {
+            border: 1px solid var(--border2);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 8px
+        }
+
+        .tier-hd {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            background: var(--bg3);
+            cursor: pointer;
+            user-select: none
+        }
+
+        .tier-hd:hover {
+            background: var(--bg4)
+        }
+
+        .tier-left {
+            display: flex;
+            align-items: center;
+            gap: 9px
+        }
+
+        .tier-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            font-family: var(--mono);
+            flex-shrink: 0
+        }
+
+        .i-hot {
+            background: rgba(79, 158, 255, .15);
+            color: var(--blue)
+        }
+
+        .i-warm {
+            background: rgba(52, 211, 153, .15);
+            color: var(--green)
+        }
+
+        .i-cold {
+            background: rgba(251, 191, 36, .15);
+            color: var(--amber)
+        }
+
+        .tier-name {
+            font-size: 12px;
+            font-weight: 600
+        }
+
+        .tier-desc {
+            font-size: 10px;
+            color: var(--muted);
+            margin-top: 1px;
+            font-family: var(--mono)
+        }
+
+        .tier-count {
+            font-size: 20px;
+            font-weight: 700;
+            font-family: var(--mono)
+        }
+
+        .tc-hot {
+            color: var(--blue)
+        }
+
+        .tc-warm {
+            color: var(--green)
+        }
+
+        .tc-cold {
+            color: var(--amber)
+        }
+
+        .tier-body {
+            display: none;
+            padding: 10px;
+            border-top: 1px solid var(--border);
+            background: var(--bg2)
+        }
+
+        .tier.open .tier-body {
+            display: block
+        }
+
+        .tc {
+            padding: 6px 8px;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            margin-bottom: 4px;
+            display: flex;
+            gap: 7px;
+            align-items: flex-start
+        }
+
+        .tc-role {
+            font-size: 9px;
+            font-weight: 700;
+            font-family: var(--mono);
+            padding: 2px 5px;
+            border-radius: 3px;
+            flex-shrink: 0;
+            margin-top: 1px
+        }
+
+        .role-u {
+            background: rgba(79, 158, 255, .2);
+            color: var(--blue)
+        }
+
+        .role-a {
+            background: rgba(139, 127, 255, .2);
+            color: var(--purple)
+        }
+
+        .tc-txt {
+            font-size: 11px;
+            color: var(--muted);
+            line-height: 1.5;
+            flex: 1
+        }
+
+        .tc-tok {
+            font-size: 9px;
+            font-family: var(--mono);
+            color: var(--dim);
+            flex-shrink: 0
+        }
+
+        .node-card {
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            border-left: 3px solid var(--green);
+            border-radius: 6px;
+            padding: 9px 11px;
+            margin-bottom: 6px;
+            cursor: pointer;
+            transition: border-color .15s
+        }
+
+        .node-card:hover {
+            border-color: var(--green)
+        }
+
+        .node-card.open {
+            border-color: var(--green)
+        }
+
+        .nc-topic {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--green);
+            margin-bottom: 4px
+        }
+
+        .nc-meta {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 5px
+        }
+
+        .nc-badge {
+            font-size: 9px;
+            font-family: var(--mono);
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: var(--bg4);
+            color: var(--muted)
+        }
+
+        .nc-badge.bl {
+            background: rgba(79, 158, 255, .12);
+            color: var(--blue)
+        }
+
+        .nc-badge.gr {
+            background: rgba(52, 211, 153, .12);
+            color: var(--green)
+        }
+
+        .nc-summary {
+            font-size: 11px;
+            color: var(--muted);
+            line-height: 1.6;
+            display: none;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid var(--border)
+        }
+
+        .node-card.open .nc-summary {
+            display: block
+        }
+
+        .nc-micro {
+            margin-top: 6px;
+            padding-top: 5px;
+            border-top: 1px dashed var(--border)
+        }
+
+        .nc-micro-item {
+            font-size: 10px;
+            color: var(--dim);
+            padding: 2px 0;
+            font-family: var(--mono)
+        }
+
+        .node-detail {
+            display: none
+        }
+
+        .cold-card {
+            background: var(--bg3);
+            border: 1px solid rgba(251, 191, 36, .3);
+            border-radius: 6px;
+            padding: 10px 12px
+        }
+
+        .cold-fname {
+            font-size: 10px;
+            font-family: var(--mono);
+            color: var(--amber);
+            margin-bottom: 6px
+        }
+
+        .cold-body {
+            font-size: 11px;
+            color: var(--muted);
+            line-height: 1.6
+        }
+
+        /* SUMMARIZER */
+        .sum-topic {
+            font-size: 10px;
+            font-family: var(--mono);
+            color: var(--purple);
+            padding: 5px 9px;
+            background: rgba(139, 127, 255, .1);
+            border-radius: 5px;
+            border-left: 2px solid var(--purple);
+            margin-bottom: 8px
+        }
+
+        .step-hd {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px
+        }
+
+        .step-num {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(52, 211, 153, .15);
+            border: 1px solid var(--green);
+            color: var(--green);
+            font-size: 9px;
+            font-weight: 700;
+            font-family: var(--mono);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0
+        }
+
+        .step-title {
+            font-size: 11px;
+            font-weight: 600
+        }
+
+        .step-sub {
+            font-size: 10px;
+            color: var(--muted)
+        }
+
+        .step-body {
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 9px;
+            margin-bottom: 10px;
+            font-size: 11px;
+            line-height: 1.65;
+            font-family: var(--mono);
+            animation: fadeUp .3s ease
+        }
+
+        .sent {
+            padding: 4px 7px;
+            border-radius: 4px;
+            background: var(--bg4);
+            margin-bottom: 3px;
+            font-size: 10px;
+            color: var(--muted);
+            border-left: 2px solid var(--border2)
+        }
+
+        .sent.top {
+            border-left-color: var(--green);
+            color: var(--text)
+        }
+
+        .freq-wrap {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px
+        }
+
+        .chip {
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-family: var(--mono)
+        }
+
+        .srow {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 4px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            margin-bottom: 3px
+        }
+
+        .sbar-wrap {
+            width: 44px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            margin-top: 2px
+        }
+
+        .sbar-track {
+            width: 6px;
+            height: 36px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end
+        }
+
+        .sbar-fill {
+            width: 100%;
+            border-radius: 3px;
+            transition: height .4s
+        }
+
+        .sscore {
+            font-size: 9px;
+            color: var(--muted)
+        }
+
+        .stext {
+            font-size: 10px;
+            color: var(--muted);
+            line-height: 1.5;
+            flex: 1
+        }
+
+        .hits {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+            margin-top: 2px
+        }
+
+        .hit {
+            font-size: 9px;
+            padding: 1px 4px;
+            border-radius: 2px;
+            background: rgba(52, 211, 153, .1);
+            color: var(--green)
+        }
+
+        .sel {
+            padding: 5px 8px;
+            background: rgba(52, 211, 153, .07);
+            border: 1px solid rgba(52, 211, 153, .25);
+            border-radius: 4px;
+            margin-bottom: 3px;
+            font-size: 10px;
+            color: var(--text);
+            line-height: 1.5
+        }
+
+        .final-sum {
+            padding: 7px 9px;
+            background: rgba(79, 158, 255, .07);
+            border: 1px solid rgba(79, 158, 255, .25);
+            border-radius: 5px;
+            font-size: 11px;
+            color: var(--text);
+            line-height: 1.65
+        }
+
+        /* STATS */
+        .sgrid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 7px;
+            margin-bottom: 7px
+        }
+
+        .scard {
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 11px 13px
+        }
+
+        .sval {
+            font-size: 22px;
+            font-weight: 700;
+            font-family: var(--mono)
+        }
+
+        .slbl {
+            font-size: 9px;
+            color: var(--muted);
+            font-family: var(--mono);
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin-top: 2px
+        }
+
+        .barwrap {
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 11px 13px;
+            margin-bottom: 7px
+        }
+
+        .barlbl {
+            font-size: 10px;
+            font-family: var(--mono);
+            color: var(--muted);
+            margin-bottom: 6px
+        }
+
+        .bartrack {
+            height: 5px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden
+        }
+
+        .barfill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--blue), var(--purple));
+            border-radius: 3px;
+            transition: width .5s
+        }
+
+        .barnums {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 4px;
+            font-size: 10px;
+            font-family: var(--mono);
+            color: var(--muted)
+        }
+
+        .barnums b {
+            color: var(--green)
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div class="hlogo">
+            <div class="hpulse" id="hpulse"></div>
+            <div>
+                <div class="htitle">Context Compression Engine</div>
+                <div class="hsub">Visual Dashboard</div>
+            </div>
+        </div>
+        <div class="hright">
+            <button class="hbtn primary" id="simBtn" onclick="startSim()">▶ Simulate</button>
+            <button class="hbtn" onclick="doCheckpoint()">Checkpoint</button>
+            <span class="hstatus" id="hstatus" style="color:var(--muted)">● disconnected</span>
+        </div>
+    </header>
+
+    <div class="sim-bar">
+        <div class="sim-fill" id="simFill"></div>
+    </div>
+
+    <div class="main">
+
+        <!-- LEFT: Chat -->
+        <div class="chat-col">
+            <div class="col-hdr"><span style="color:var(--blue)">◈</span> Conversation</div>
+            <div class="msgs" id="msgs">
+                <div class="msg assistant">
+                    <div class="av">CC</div>
+                    <div class="bubble">Click <b>▶ Simulate</b> to watch a 24-turn SaaS conversation flow through CCE in
+                        real time — then ask me anything yourself!</div>
+                </div>
+            </div>
+            <div class="chat-foot">
+                <textarea class="cinp" id="cinp" placeholder="Ask anything after simulation... (Enter to send)" rows="1"
+                    onkeydown="onKey(event)"></textarea>
+                <button class="sbtn" id="sbtn" onclick="sendMsg()">↑</button>
+            </div>
+        </div>
+
+        <!-- RIGHT: Tabs -->
+        <div class="right-col">
+            <div class="tabs">
+                <div class="tab on" id="t-log" onclick="showTab('log')">Pipeline</div>
+                <div class="tab" id="t-mem" onclick="showTab('mem')">Memory</div>
+                <div class="tab" id="t-sum" onclick="showTab('sum')">Summarizer</div>
+                <div class="tab" id="t-stat" onclick="showTab('stat')">Stats</div>
+            </div>
+
+            <!-- PIPELINE LOG -->
+            <div class="tp on" id="p-log">
+                <div class="empty" id="logEmpty">Click ▶ Simulate to start</div>
+            </div>
+
+            <!-- MEMORY -->
+            <div class="tp" id="p-mem">
+                <!-- Hot -->
+                <div class="tier" id="tierHot">
+                    <div class="tier-hd" onclick="toggleTier('Hot')">
+                        <div class="tier-left">
+                            <div class="tier-icon i-hot">RAM</div>
+                            <div>
+                                <div class="tier-name">Hot tier</div>
+                                <div class="tier-desc">Last 6 turns · verbatim · in-memory</div>
+                            </div>
+                        </div>
+                        <div class="tier-count tc-hot" id="cntHot">0</div>
+                    </div>
+                    <div class="tier-body" id="bodyHot">
+                        <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">No turns yet</div>
+                    </div>
+                </div>
+                <!-- Warm -->
+                <div class="tier" id="tierWarm">
+                    <div class="tier-hd" onclick="toggleTier('Warm')">
+                        <div class="tier-left">
+                            <div class="tier-icon i-warm">SQL</div>
+                            <div>
+                                <div class="tier-name">Warm tier</div>
+                                <div class="tier-desc">Compressed nodes · SQLite · vector search</div>
+                            </div>
+                        </div>
+                        <div class="tier-count tc-warm" id="cntWarm">0</div>
+                    </div>
+                    <div class="tier-body" id="bodyWarm" style="max-height:320px;overflow-y:auto;padding:10px">
+                        <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">No nodes yet</div>
+                    </div>
+                </div>
+                <!-- Cold -->
+                <div class="tier" id="tierCold">
+                    <div class="tier-hd" onclick="toggleTier('Cold')">
+                        <div class="tier-left">
+                            <div class="tier-icon i-cold">DSK</div>
+                            <div>
+                                <div class="tier-name">Cold tier</div>
+                                <div class="tier-desc">Macro summary · JSON file · disk</div>
+                            </div>
+                        </div>
+                        <div class="tier-count tc-cold" id="cntCold">0</div>
+                    </div>
+                    <div class="tier-body" id="bodyCold">
+                        <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">No checkpoint yet</div>
+                    </div>
+                </div>
+                <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-align:center;padding:4px">
+                    Click any tier to expand · click warm rows to see full summary</div>
+            </div>
+
+            <!-- SUMMARIZER -->
+            <div class="tp" id="p-sum">
+                <div class="empty" id="sumEmpty">Summarizer fires when hot tier overflows.<br>Keep chatting or run the
+                    simulation to see it.</div>
+                <div id="sumContent"></div>
+            </div>
+
+            <!-- STATS -->
+            <div class="tp" id="p-stat">
+                <div class="sgrid">
+                    <div class="scard">
+                        <div class="sval" id="stTurns">0</div>
+                        <div class="slbl">turns ingested</div>
+                    </div>
+                    <div class="scard">
+                        <div class="sval" id="stNodes">0</div>
+                        <div class="slbl">warm nodes</div>
+                    </div>
+                    <div class="scard">
+                        <div class="sval" id="stHot">0</div>
+                        <div class="slbl">hot tier turns</div>
+                    </div>
+                    <div class="scard">
+                        <div class="sval" id="stRatio">—</div>
+                        <div class="slbl">compression ratio</div>
+                    </div>
+                </div>
+                <div class="barwrap">
+                    <div class="barlbl">Raw tokens vs compressed tokens</div>
+                    <div class="bartrack">
+                        <div class="barfill" id="barFill" style="width:0%"></div>
+                    </div>
+                    <div class="barnums"><span id="bnRaw">0 raw</span><b id="bnSaved">—</b><span id="bnComp">0
+                            compressed</span></div>
+                </div>
+                <div class="barwrap">
+                    <div class="barlbl">Session info</div>
+                    <div style="font-size:10px;font-family:var(--mono);color:var(--muted);line-height:2;margin-top:4px"
+                        id="sessInfo">—</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        var ws = null;
+        var busy = false;
+        var simRunning = false;
+        var warmNodes = [];
+        var selNode = null;
+
+        // Connection
+        function connect() {
+            ws = new WebSocket('ws://localhost:7860/ws');
+            ws.onopen = function () {
+                document.getElementById('hpulse').classList.add('on');
+                document.getElementById('hstatus').textContent = '● connected';
+                document.getElementById('hstatus').style.color = 'var(--green)';
+            };
+            ws.onclose = function () {
+                document.getElementById('hpulse').classList.remove('on');
+                document.getElementById('hstatus').textContent = '● disconnected';
+                document.getElementById('hstatus').style.color = 'var(--red)';
+                setTimeout(connect, 2000);
+            };
+            ws.onmessage = function (e) { handle(JSON.parse(e.data)); };
+        }
+
+        function handle(msg) {
+            var d = msg.data;
+            switch (msg.event) {
+                case 'state': renderState(d); break;
+                case 'log': addLog(d); break;
+                case 'chat_msg': addChatMsg(d.role, d.content, d.simulated); break;
+                case 'summarizer': renderSummarizer(d); break;
+                case 'retrieved': addRetrieved(d.nodes); break;
+                case 'sim_start':
+                    simRunning = true;
+                    document.getElementById('simBtn').textContent = '⏳ Running...';
+                    document.getElementById('simBtn').disabled = true;
+                    document.getElementById('cinp').disabled = true;
+                    document.getElementById('sbtn').disabled = true;
+                    break;
+                case 'sim_progress':
+                    var pct = Math.round((d.current / d.total) * 100);
+                    document.getElementById('simFill').style.width = pct + '%';
+                    break;
+                case 'sim_done':
+                    simRunning = false;
+                    document.getElementById('simBtn').textContent = '↺ Rerun';
+                    document.getElementById('simBtn').disabled = false;
+                    document.getElementById('cinp').disabled = false;
+                    document.getElementById('sbtn').disabled = false;
+                    setTimeout(function () {
+                        document.getElementById('simFill').style.width = '0%';
+                    }, 1500);
+                    break;
+                case 'reset_ui':
+                    document.getElementById('msgs').innerHTML = '<div class="msg assistant"><div class="av">CC</div><div class="bubble">Re-simulating the SaaS conversation... watch the pipeline on the right.</div></div>';
+                    document.getElementById('p-log').innerHTML = '<div class="empty" id="logEmpty">Simulation starting...</div>';
+                    document.getElementById('sumContent').innerHTML = '';
+                    document.getElementById('sumEmpty').style.display = 'block';
+                    // Reset memory tiers
+                    document.getElementById('cntHot').textContent = '0';
+                    document.getElementById('cntWarm').textContent = '0';
+                    document.getElementById('cntCold').textContent = '0';
+                    document.getElementById('bodyHot').innerHTML = '<div style="font-size:10px;color:var(--muted);font-family:var(--mono)">No turns yet</div>';
+                    document.getElementById('bodyWarm').innerHTML = '<div style="font-size:10px;color:var(--muted);font-family:var(--mono)">No nodes yet</div>';
+                    document.getElementById('bodyCold').innerHTML = '<div style="font-size:10px;color:var(--muted);font-family:var(--mono)">No checkpoint yet</div>';
+                    // Reset stats
+                    ['stTurns', 'stNodes', 'stHot'].forEach(function (id) { document.getElementById(id).textContent = '0' });
+                    document.getElementById('stRatio').textContent = '—';
+                    document.getElementById('barFill').style.width = '0%';
+                    document.getElementById('bnRaw').textContent = '0 raw';
+                    document.getElementById('bnComp').textContent = '0 compressed';
+                    document.getElementById('bnSaved').textContent = '—';
+                    warmNodes = []; selNode = null;
+                    break;
+            }
+        }
+
+        // Simulate
+        function startSim() {
+            if (!ws || ws.readyState !== 1) return;
+            ws.send(JSON.stringify({ type: 'simulate' }));
+            showTab('log');
+        }
+
+        // Chat
+        function sendMsg() {
+            if (busy || simRunning) return;
+            var inp = document.getElementById('cinp');
+            var text = inp.value.trim();
+            if (!text || !ws || ws.readyState !== 1) return;
+            addChatMsg('user', text, false);
+            busy = true;
+            document.getElementById('sbtn').disabled = true;
+            document.getElementById('cinp').disabled = true;
+            inp.value = '';
+            inp.style.height = 'auto';
+            showTab('log');
+            ws.send(JSON.stringify({ type: 'chat', content: text }));
+        }
+
+        function addChatMsg(role, content, simulated) {
+            var msgs = document.getElementById('msgs');
+            var typing = document.getElementById('typingEl');
+            if (typing) typing.remove();
+            var div = document.createElement('div');
+            div.className = 'msg ' + role + (simulated ? ' simulated' : '');
+            div.innerHTML = '<div class="av">' + (role === 'user' ? 'You' : 'CC') + '</div><div class="bubble">' + esc(content) + '</div>';
+            msgs.appendChild(div);
+            msgs.scrollTop = msgs.scrollHeight;
+            if (role === 'assistant' && !simulated) {
+                busy = false;
+                document.getElementById('sbtn').disabled = false;
+                document.getElementById('cinp').disabled = false;
+            }
+        }
+
+        function onKey(e) {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+            var ta = document.getElementById('cinp');
+            ta.style.height = 'auto';
+            ta.style.height = Math.min(ta.scrollHeight, 100) + 'px';
+        }
+
+        // Log
+        var dotMap = { info: 'd-info', ok: 'd-ok', warn: 'd-warn', err: 'd-err' };
+        function addLog(d) {
+            var panel = document.getElementById('p-log');
+            var empty = document.getElementById('logEmpty');
+            if (empty) empty.remove();
+            var div = document.createElement('div');
+            div.className = 'log-item';
+            div.innerHTML = '<div class="ldot ' + (dotMap[d.type] || 'd-info') + '"></div><div class="ltext">' + esc(d.text) + '</div>';
+            panel.appendChild(div);
+            panel.scrollTop = panel.scrollHeight;
+        }
+
+        function addRetrieved(nodes) {
+            var panel = document.getElementById('p-log');
+            var box = document.createElement('div');
+            box.className = 'ret-box';
+            box.innerHTML = '<div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:4px">Retrieved nodes:</div>' +
+                nodes.map(function (n) {
+                    return '<div class="ret-row"><b>' + esc(n.topic) + '</b> · score: <b>' + n.score + '</b></div>';
+                }).join('');
+            panel.appendChild(box);
+            panel.scrollTop = panel.scrollHeight;
+        }
+
+        // Tabs
+        function showTab(id) {
+            document.querySelectorAll('.tp').forEach(function (p) { p.classList.remove('on') });
+            document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('on') });
+            document.getElementById('p-' + id).classList.add('on');
+            document.getElementById('t-' + id).classList.add('on');
+        }
+
+        // Tiers
+        function toggleTier(name) {
+            document.getElementById('tier' + name).classList.toggle('open');
+        }
+
+        // State
+        function renderState(data) {
+            if (!data) return;
+            warmNodes = data.warm || [];
+
+            // Hot
+            document.getElementById('cntHot').textContent = (data.hot || []).length;
+            var bh = document.getElementById('bodyHot');
+            if (!data.hot || data.hot.length === 0) {
+                bh.innerHTML = '<div style="font-size:10px;color:var(--muted);font-family:var(--mono)">No turns yet</div>';
+            } else {
+                bh.innerHTML = data.hot.map(function (t) {
+                    return '<div class="tc">' +
+                        '<span class="tc-role ' + (t.role === 'user' ? 'role-u' : 'role-a') + '">' + t.role.toUpperCase() + '</span>' +
+                        '<span class="tc-txt">' + esc(t.content.substring(0, 80)) + (t.content.length > 80 ? '...' : '') + '</span>' +
+                        '<span class="tc-tok">' + t.tokens + 'tk</span></div>';
+                }).join('');
+            }
+
+            // Warm — node cards
+            document.getElementById('cntWarm').textContent = (data.warm || []).length;
+            var bw = document.getElementById('bodyWarm');
+            if (!data.warm || data.warm.length === 0) {
+                bw.innerHTML = '<div style="font-size:10px;color:var(--muted);font-family:var(--mono)">No nodes yet — keep running simulation</div>';
+            } else {
+                bw.innerHTML = '';
+                data.warm.forEach(function (n, i) {
+                    var card = document.createElement('div');
+                    card.className = 'node-card';
+                    card.id = 'nc-' + i;
+                    var microHtml = '';
+                    if (n.micro && n.micro.length) {
+                        microHtml = '<div class="nc-micro">' +
+                            n.micro.map(function (m) { return '<div class="nc-micro-item">· ' + esc(m) + '</div>'; }).join('') +
+                            '</div>';
+                    }
+                    card.innerHTML =
+                        '<div class="nc-topic">' + esc(n.topic) + '</div>' +
+                        '<div class="nc-meta">' +
+                        '<span class="nc-badge bl">turns ' + esc(n.turns) + '</span>' +
+                        '<span class="nc-badge gr">' + n.tokens_original + ' tokens</span>' +
+                        '<span class="nc-badge">id: ' + esc(n.node_id) + '</span>' +
+                        '</div>' +
+                        '<div class="nc-summary">' + esc(n.summary) + microHtml + '</div>';
+                    card.onclick = function () { card.classList.toggle('open'); };
+                    bw.appendChild(card);
+                });
+            }
+
+            // Cold
+            document.getElementById('cntCold').textContent = data.cold_exists ? '1' : '0';
+            var bc = document.getElementById('bodyCold');
+            if (data.cold_exists && data.cold_text) {
+                bc.innerHTML = '<div class="cold-card"><div class="cold-fname">📄 demo-session.json</div><div class="cold-body">' + esc(data.cold_text) + '</div></div>';
+            } else {
+                bc.innerHTML = '<div style="font-size:10px;color:var(--muted);font-family:var(--mono)">No checkpoint yet — click Checkpoint button</div>';
+            }
+
+            // Stats
+            var s = data.stats || {};
+            document.getElementById('stTurns').textContent = s.turns_ingested || 0;
+            document.getElementById('stNodes').textContent = s.warm_nodes || 0;
+            document.getElementById('stHot').textContent = s.hot_turns || 0;
+            document.getElementById('stRatio').textContent = s.compression_ratio ? s.compression_ratio + 'x' : '—';
+            var raw = s.raw_tokens || 0;
+            var comp = s.warm_tokens_compressed || 0;
+            var pct = raw > 0 && comp > 0 ? Math.min(Math.round((comp / raw) * 100), 100) : 0;
+            document.getElementById('barFill').style.width = pct + '%';
+            document.getElementById('bnRaw').textContent = raw + ' raw';
+            document.getElementById('bnComp').textContent = comp + ' compressed';
+            var saved = raw - comp;
+            document.getElementById('bnSaved').textContent = saved > 0 ? saved + ' saved' : '—';
+            document.getElementById('sessInfo').innerHTML =
+                'session: ' + (s.session_id || '—') + '<br>cold checkpoint: ' + (s.cold_summary_exists ? 'yes' : 'no') + '<br>opened: ' + (s.opened_at ? s.opened_at.substring(0, 19).replace('T', ' ') : '—');
+        }
+
+        // expandNode removed — cards handle their own expand via onclick toggle
+
+        // Summarizer stepper
+        function renderSummarizer(data) {
+            showTab('sum');
+            document.getElementById('sumEmpty').style.display = 'none';
+            var el = document.getElementById('sumContent');
+            var wrap = document.createElement('div');
+            wrap.style.animation = 'fadeUp .3s ease';
+
+            var topicEl = document.createElement('div');
+            topicEl.className = 'sum-topic';
+            topicEl.textContent = 'Chunk: ' + data.topic;
+            wrap.appendChild(topicEl);
+
+            var st = data.steps;
+
+            // Step 1
+            wrap.appendChild(stepHdr(1, 'Split into sentences', st.step1_sentences.length + ' sentences found'));
+            var b1 = mkBody();
+            st.step1_sentences.forEach(function (s) {
+                var d = document.createElement('div');
+                d.className = 'sent';
+                d.textContent = s;
+                b1.appendChild(d);
+            });
+            wrap.appendChild(b1);
+
+            // Step 2
+            wrap.appendChild(stepHdr(2, 'Build word frequency map', 'stopwords removed · top keywords'));
+            var b2 = mkBody();
+            var fw = document.createElement('div'); fw.className = 'freq-wrap';
+            var maxC = st.step2_freq.length ? st.step2_freq[0][1] : 1;
+            st.step2_freq.forEach(function (p) {
+                var c = document.createElement('div'); c.className = 'chip';
+                var op = 0.1 + (p[1] / maxC) * 0.5;
+                c.style.background = 'rgba(52,211,153,' + op + ')';
+                c.style.color = 'var(--green)';
+                c.style.border = '1px solid rgba(52,211,153,' + (p[1] / maxC * 0.4) + ')';
+                c.textContent = p[0] + ' ×' + p[1];
+                fw.appendChild(c);
+            });
+            b2.appendChild(fw); wrap.appendChild(b2);
+
+            // Step 3
+            wrap.appendChild(stepHdr(3, 'Score each sentence', 'keyword overlap + length bonus'));
+            var b3 = mkBody();
+            var maxS = st.step3_scored.length ? Math.max(...st.step3_scored.map(function (x) { return x.score })) : 1;
+            st.step3_scored.forEach(function (item) {
+                var pct = maxS > 0 ? Math.round((item.score / maxS) * 100) : 0;
+                var col = pct > 60 ? 'var(--green)' : pct > 30 ? 'var(--amber)' : 'var(--muted)';
+                var row = document.createElement('div'); row.className = 'srow';
+                row.innerHTML = '<div class="sbar-wrap"><div class="sbar-track"><div class="sbar-fill" style="height:' + pct + '%;background:' + col + '"></div></div><div class="sscore">' + item.score + '</div></div>' +
+                    '<div class="stext">' + esc(item.text.substring(0, 70)) + (item.text.length > 70 ? '...' : '') +
+                    (item.hits.length ? '<div class="hits">' + item.hits.map(function (h) { return '<span class="hit">' + esc(h) + '</span>' }).join('') + '</div>' : '') +
+                    '</div>';
+                b3.appendChild(row);
+            });
+            wrap.appendChild(b3);
+
+            // Step 4
+            wrap.appendChild(stepHdr(4, 'Pick top sentences', 'within token budget · reorder by position'));
+            var b4 = mkBody();
+            st.step4_selected.forEach(function (s) {
+                var d = document.createElement('div'); d.className = 'sel'; d.textContent = s; b4.appendChild(d);
+            });
+            var fl = document.createElement('div');
+            fl.style = 'font-size:10px;color:var(--muted);font-family:var(--mono);margin:7px 0 4px';
+            fl.textContent = 'Final meso summary:';
+            b4.appendChild(fl);
+            var fb = document.createElement('div'); fb.className = 'final-sum'; fb.textContent = st.summary; b4.appendChild(fb);
+            wrap.appendChild(b4);
+
+            el.innerHTML = '';
+            el.appendChild(wrap);
+        }
+
+        function stepHdr(n, title, sub) {
+            var d = document.createElement('div'); d.className = 'step-hd';
+            d.innerHTML = '<div class="step-num">' + n + '</div><div><div class="step-title">' + esc(title) + '</div><div class="step-sub">' + esc(sub) + '</div></div>';
+            return d;
+        }
+        function mkBody() { var d = document.createElement('div'); d.className = 'step-body'; return d; }
+
+        function doCheckpoint() {
+            if (!ws || ws.readyState !== 1) return;
+            ws.send(JSON.stringify({ type: 'checkpoint' }));
+            showTab('log');
+        }
+
+        function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+        // ── Summarizer Demo ──────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+        connect();
+    </script>
+</body>
+
+</html>

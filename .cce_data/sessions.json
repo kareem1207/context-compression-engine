@@ -5,5 +5,26 @@
     "last_active": "2026-04-19T14:14:33.936936+00:00",
     "turn_count": 22,
     "status": "closed"
+  },
+  "ui-session": {
+    "session_id": "ui-session",
+    "created_at": "2026-04-19T15:34:31.336021+00:00",
+    "last_active": "2026-04-19T16:17:48.135528+00:00",
+    "turn_count": 2,
+    "status": "closed"
+  },
+  "mcp-visual-demo": {
+    "session_id": "mcp-visual-demo",
+    "created_at": "2026-04-19T15:44:56.653026+00:00",
+    "last_active": "2026-04-19T15:46:22.436328+00:00",
+    "turn_count": 22,
+    "status": "closed"
+  },
+  "demo-session": {
+    "session_id": "demo-session",
+    "created_at": "2026-04-19T16:30:33.652269+00:00",
+    "last_active": "2026-04-19T17:38:55.992575+00:00",
+    "turn_count": 44,
+    "status": "closed"
   }
 }

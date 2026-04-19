@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.13.2",
     "pytest>=9.0.3",
     "python-dotenv>=1.2.2",
+    "pyvis>=0.3.2",
     "sentence-transformers>=5.4.1",
     "sqlalchemy>=2.0.49",
     "uvicorn>=0.44.0",
