@@ -2,8 +2,8 @@
 CCE Engine — Main Orchestrator
 The single entry point for all compression operations.
 Phases are wired in progressively:
-  Phase 1 — ingestion + compression (this file, partial)
-  Phase 2 — memory store (added when memory/ is complete)
+  Phase 1 — ingestion + compression ✓
+  Phase 2 — memory store ✓
   Phase 3 — retrieval (added when retrieval/ is complete)
   Phase 4 — session management
 """
@@ -15,6 +15,7 @@ from cce_core.ingestion.segmenter import Turn, segment, segment_incremental
 from cce_core.compression.chunker import Chunk, SemanticChunker
 from cce_core.compression.summarizer import Summarizer
 from cce_core.compression.merger import Merger, MemoryNode
+from cce_core.memory.store import MemoryStore
 
 
 class CCEEngine:
@@ -133,6 +134,50 @@ class CCEEngine:
             return combined
         from cce_core.compression.summarizer import _extractive_summarize
         return _extractive_summarize(combined, self.config.macro_max_tokens)
+
+    # ── Phase 2: Memory store ─────────────────────────────────────────────────
+
+    def open_session(self, session_id: str) -> MemoryStore:
+        """
+        Open a stateful MemoryStore for a session.
+        The compress_fn is injected so the store can auto-compress evictions.
+
+        Usage:
+            store = engine.open_session("session-abc")
+            store.ingest_turns(turns)
+            results = store.search_warm(query_emb)
+            store.checkpoint(macro_text)
+            store.close()
+        """
+        return MemoryStore(
+            session_id=session_id,
+            config=self.config,
+            compress_fn=self.compress_incremental,
+        )
+
+    def full_pipeline(
+        self,
+        messages: list[dict] | str,
+        session_id: str,
+    ) -> tuple[MemoryStore, list[Turn], list[MemoryNode]]:
+        """
+        Full Phase 1+2 pipeline in one call:
+          ingest → compress → store in warm tier
+
+        Returns (store, turns, nodes). Call store.close() when done.
+        """
+        turns = self.ingest(messages, session_id=session_id)
+        nodes = self.compress(turns, session_id=session_id)
+
+        store = self.open_session(session_id)
+        store.ingest_nodes(nodes, turns=turns)
+
+        # Push latest turns into hot tier for verbatim recent context
+        recent = turns[-self.config.hot_tier_max_turns:]
+        for turn in recent:
+            store.hot.push(turn)
+
+        return store, turns, nodes
 
     # ── Diagnostics ───────────────────────────────────────────────────────────
 
