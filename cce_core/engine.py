@@ -16,6 +16,8 @@ from cce_core.compression.chunker import Chunk, SemanticChunker
 from cce_core.compression.summarizer import Summarizer
 from cce_core.compression.merger import Merger, MemoryNode
 from cce_core.memory.store import MemoryStore
+from cce_core.retrieval.retriever import Retriever, RetrievalResult
+from cce_core.retrieval.context_builder import ContextBuilder, ContextPayload
 
 
 class CCEEngine:
@@ -35,6 +37,8 @@ class CCEEngine:
         self.chunker = SemanticChunker(config)
         self.summarizer = Summarizer(config)
         self.merger = Merger(config)
+        self.retriever = Retriever(embed_fn=self.chunker.embed_text, config=config)
+        self.context_builder = ContextBuilder(config)
 
     # ── Phase 1: Ingest ───────────────────────────────────────────────────────
 
@@ -178,6 +182,87 @@ class CCEEngine:
             store.hot.push(turn)
 
         return store, turns, nodes
+
+    # ── Phase 3: Retrieval + context assembly ─────────────────────────────────
+
+    def retrieve(
+        self,
+        store: MemoryStore,
+        query: str,
+        top_k: int | None = None,
+    ) -> list[RetrievalResult]:
+        """
+        Retrieve the most relevant memory nodes for a query.
+
+        Args:
+            store: The active MemoryStore for this session.
+            query: Natural language query (usually the user's latest message).
+            top_k: Number of nodes to retrieve.
+
+        Returns:
+            Ranked list of RetrievalResult objects.
+        """
+        return self.retriever.retrieve(store, query, top_k=top_k)
+
+    def build_context(
+        self,
+        store: MemoryStore,
+        query: str,
+        top_k: int | None = None,
+        fmt: str = "messages",
+        include_micro: bool = False,
+    ) -> "ContextPayload":
+        """
+        Full Phase 3 pipeline: retrieve → build context payload.
+        This is what you call right before every LLM inference.
+
+        Args:
+            store: The active MemoryStore for this session.
+            query: The user's latest message / question.
+            top_k: Number of memory nodes to retrieve.
+            fmt: Output format — "messages", "string", or "dict".
+            include_micro: Include per-turn micro summaries in past blocks.
+
+        Returns:
+            ContextPayload — call .to_messages(), .to_string(), or .to_dict().
+
+        Example:
+            payload = engine.build_context(store, query="what is gradient descent?")
+            messages = payload.to_messages()
+            # → inject messages into llama.cpp / OpenAI API call
+        """
+        results = self.retriever.retrieve(store, query, top_k=top_k)
+        hot_turns = store.get_hot_turns()
+
+        if not results:
+            return self.context_builder.build_empty(hot_turns)
+
+        return self.context_builder.build(
+            results=results,
+            hot_turns=hot_turns,
+            include_micro=include_micro,
+        )
+
+    def query(
+        self,
+        store: MemoryStore,
+        user_message: str,
+        fmt: str = "messages",
+    ) -> tuple[list[dict] | str | dict, "ContextPayload"]:
+        """
+        One-shot: ingest a new user message, build context, return payload.
+        Designed for the stateful real-time use case:
+
+            for user_msg in conversation:
+                context, payload = engine.query(store, user_msg)
+                response = call_llm(context)
+                engine.ingest_one({"role": "assistant", "content": response}, store._turns)
+
+        Returns (exported_context, payload) — use exported_context for LLM call,
+        payload for diagnostics.
+        """
+        payload = self.build_context(store, user_message, fmt=fmt)
+        return payload.export(fmt), payload
 
     # ── Diagnostics ───────────────────────────────────────────────────────────
 
