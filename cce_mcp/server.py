@@ -45,7 +45,7 @@ from cce_mcp.schema import (
 # ── Lifespan — engine + manager live for the server's lifetime ────────────────
 
 @asynccontextmanager
-async def cce_lifespan():
+async def cce_lifespan(app):
     """Initialize CCE engine and session manager on startup, clean up on shutdown."""
     config = CCEConfig(
         summarizer_mode=os.getenv("CCE_SUMMARIZER_MODE", "extractive"),

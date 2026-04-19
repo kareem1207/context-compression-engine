@@ -15,7 +15,6 @@ What this demo shows:
   - Showing compression ratio and token savings
 """
 
-import json
 import sys
 from pathlib import Path
 
@@ -56,10 +55,29 @@ LONG_HISTORY = [
 NEW_QUESTION = "Can you remind me what you said about Docker Compose and also how authentication works in FastAPI?"
 
 
+def _extract_completion_fields(data: dict) -> tuple[str, str, dict]:
+    """Extract assistant content and lightweight metadata from OpenAI-style response."""
+    choices = data.get("choices") or []
+    if not choices:
+        return "", "no_choices", {}
+
+    first = choices[0] or {}
+    message = first.get("message") or {}
+    content = message.get("content") or ""
+    finish_reason = first.get("finish_reason") or "unknown"
+    usage = data.get("usage") or {}
+    meta = {
+        "finish_reason": finish_reason,
+        "prompt_tokens": usage.get("prompt_tokens", "?"),
+        "completion_tokens": usage.get("completion_tokens", "?"),
+        "total_tokens": usage.get("total_tokens", "?"),
+    }
+    return content, finish_reason, meta
+
+
 def call_gemma(messages: list[dict], endpoint: str = "http://localhost:8080/v1") -> str:
-    """Send messages to Gemma 4 via llama.cpp OpenAI-compat API."""
     try:
-        with httpx.Client(timeout=60.0) as client:
+        with httpx.Client(timeout=300.0) as client:
             resp = client.post(
                 f"{endpoint}/chat/completions",
                 json={
@@ -70,13 +88,22 @@ def call_gemma(messages: list[dict], endpoint: str = "http://localhost:8080/v1")
                 },
             )
             resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
+            data = resp.json()
+            choices = data.get("choices", [])
+            if not choices:
+                return f"[No choices: {data}]"
+            content = choices[0].get("message", {}).get("content", "").strip()
+            finish = choices[0].get("finish_reason", "?")
+            usage = data.get("usage", {})
+            meta = f"finish={finish}, tokens={usage.get('completion_tokens','?')}"
+            return f"{content}\n    Meta: {meta}" if content else f"[Empty]\n    Meta: {meta}"
     except httpx.ConnectError:
-        return "[llama.cpp not running — start with: llama-server -m gemma-4-... --port 8080]"
+        return "[llama.cpp not running]"
+    except httpx.TimeoutException:
+        return "[Timed out]"
     except Exception as e:
-        return f"[LLM error: {e}]"
-
-
+        return f"[Error: {e}]"
+    
 def main():
     print("=" * 60)
     print("Context Compression Engine — Gemma 4 Demo")
@@ -128,8 +155,20 @@ def main():
 
     # ── Call Gemma 4 ───────────────────────────────────────────────
     print("\n[5] Calling Gemma 4 via llama.cpp...")
-    response = call_gemma(messages)
-    print(f"\n    Gemma 4 response:\n    {response}")
+    response, response_meta = call_gemma(messages)
+    print("\n    Gemma 4 response:")
+    if response.strip():
+        print(f"    {response}")
+    else:
+        print("    [Empty content returned by model]")
+    print(
+        "    Meta: "
+        f"attempt={response_meta.get('attempt', '?')}, "
+        f"finish_reason={response_meta.get('finish_reason', '?')}, "
+        f"prompt={response_meta.get('prompt_tokens', '?')}, "
+        f"completion={response_meta.get('completion_tokens', '?')}, "
+        f"total={response_meta.get('total_tokens', '?')}"
+    )
 
     # ── Stateless comparison ───────────────────────────────────────
     print("\n[6] Stateless mode comparison (same question, no session)...")
