@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>CCE — How the Summarizer Works</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;500;700&display=swap');
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        :root {
+            --bg: #0b0d11;
+            --bg2: #10131a;
+            --bg3: #161b24;
+            --bg4: #1c2230;
+            --border: #1a2030;
+            --border2: #222c3c;
+            --text: #dde5f5;
+            --muted: #4a6080;
+            --dim: #1e2838;
+            --blue: #4f9eff;
+            --purple: #9d88ff;
+            --green: #34d399;
+            --amber: #fbbf24;
+            --red: #f87171;
+            --teal: #2dd4bf;
+            --font: 'Syne', sans-serif;
+            --mono: 'JetBrains Mono', monospace;
+        }
+
+        html,
+        body {
+            min-height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font)
+        }
+
+        body {
+            display: flex;
+            flex-direction: column
+        }
+
+        /* ── HEADER ── */
+        header {
+            padding: 14px 28px;
+            background: var(--bg2);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 16px
+        }
+
+        .hbadge {
+            font-size: 9px;
+            font-family: var(--mono);
+            letter-spacing: 2px;
+            color: var(--muted);
+            border: 1px solid var(--border2);
+            padding: 3px 10px;
+            border-radius: 20px
+        }
+
+        .htitle {
+            font-size: 17px;
+            font-weight: 700;
+            letter-spacing: -.3px
+        }
+
+        .hsub {
+            font-size: 11px;
+            color: var(--muted);
+            font-family: var(--mono);
+            margin-top: 2px
+        }
+
+        /* ── LAYOUT ── */
+        .layout {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            min-height: calc(100vh - 58px)
+        }
+
+        /* ── SIDEBAR ── */
+        .sidebar {
+            background: var(--bg2);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto
+        }
+
+        .sb-sect {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border)
+        }
+
+        .sb-label {
+            font-size: 9px;
+            font-family: var(--mono);
+            color: var(--muted);
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            margin-bottom: 10px
+        }
+
+        .preset {
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border2);
+            background: var(--bg3);
+            cursor: pointer;
+            margin-bottom: 6px;
+            transition: all .15s
+        }
+
+        .preset:hover,
+        .preset.on {
+            border-color: var(--blue);
+            background: rgba(79, 158, 255, .07)
+        }
+
+        .preset-name {
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 3px
+        }
+
+        .preset-tip {
+            font-size: 10px;
+            color: var(--muted);
+            font-family: var(--mono);
+            line-height: 1.4
+        }
+
+        textarea {
+            width: 100%;
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            border-radius: 7px;
+            padding: 9px 11px;
+            font-size: 11px;
+            color: var(--text);
+            font-family: var(--mono);
+            resize: vertical;
+            outline: none;
+            line-height: 1.6;
+            min-height: 90px
+        }
+
+        textarea:focus {
+            border-color: var(--blue)
+        }
+
+        textarea::placeholder {
+            color: var(--muted)
+        }
+
+        .run-btn {
+            width: 100%;
+            padding: 11px;
+            border-radius: 8px;
+            background: var(--blue);
+            border: none;
+            color: #000;
+            font-size: 13px;
+            font-weight: 700;
+            font-family: var(--font);
+            cursor: pointer;
+            transition: all .15s;
+            margin-top: 10px;
+            letter-spacing: .3px
+        }
+
+        .run-btn:hover {
+            background: #70b8ff;
+            transform: translateY(-1px)
+        }
+
+        .run-btn:disabled {
+            opacity: .4;
+            cursor: default;
+            transform: none
+        }
+
+        .tok-box {
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 9px 11px;
+            font-size: 10px;
+            font-family: var(--mono);
+            color: var(--muted);
+            line-height: 2;
+            margin-top: 10px;
+            display: none
+        }
+
+        .tok-box b {
+            color: var(--green)
+        }
+
+        /* ── MAIN ── */
+        .main {
+            overflow-y: auto;
+            padding: 24px 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 28px
+        }
+
+        .main::-webkit-scrollbar {
+            width: 4px
+        }
+
+        .main::-webkit-scrollbar-thumb {
+            background: var(--border2);
+            border-radius: 2px
+        }
+
+        .empty-hero {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 60vh;
+            color: var(--muted);
+            text-align: center;
+            gap: 14px
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            opacity: .2
+        }
+
+        .empty-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text);
+            opacity: .5
+        }
+
+        .empty-sub {
+            font-size: 13px;
+            line-height: 1.7;
+            max-width: 380px
+        }
+
+        /* ── STEP CARDS ── */
+        .step-card {
+            background: var(--bg2);
+            border: 1px solid var(--border2);
+            border-radius: 12px;
+            overflow: hidden;
+            animation: slideUp .4s ease
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px)
+            }
+
+            to {
+                opacity: 1;
+                transform: none
+            }
+        }
+
+        .step-hdr {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 13px 18px;
+            border-bottom: 1px solid var(--border)
+        }
+
+        .step-num {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            font-family: var(--mono);
+            flex-shrink: 0
+        }
+
+        .n1 {
+            background: rgba(79, 158, 255, .15);
+            color: var(--blue);
+            border: 1px solid rgba(79, 158, 255, .4)
+        }
+
+        .n2 {
+            background: rgba(52, 211, 153, .15);
+            color: var(--green);
+            border: 1px solid rgba(52, 211, 153, .4)
+        }
+
+        .n3 {
+            background: rgba(251, 191, 36, .15);
+            color: var(--amber);
+            border: 1px solid rgba(251, 191, 36, .4)
+        }
+
+        .n4 {
+            background: rgba(157, 136, 255, .15);
+            color: var(--purple);
+            border: 1px solid rgba(157, 136, 255, .4)
+        }
+
+        .step-title {
+            font-size: 14px;
+            font-weight: 600
+        }
+
+        .step-sub {
+            font-size: 10px;
+            color: var(--muted);
+            font-family: var(--mono);
+            margin-top: 2px
+        }
+
+        .step-body {
+            padding: 18px 20px
+        }
+
+        /* ── STEP 1: sentence list ── */
+        .sent-list {
+            display: flex;
+            flex-direction: column;
+            gap: 5px
+        }
+
+        .sent-pill {
+            padding: 9px 13px;
+            border-radius: 7px;
+            font-size: 12px;
+            line-height: 1.6;
+            border-left: 3px solid var(--border2);
+            background: var(--bg3);
+            color: var(--muted);
+            position: relative;
+            transition: all .2s;
+            cursor: default
+        }
+
+        .sent-pill.sel {
+            border-left-color: var(--green);
+            background: rgba(52, 211, 153, .05);
+            color: var(--text)
+        }
+
+        .sel-tag {
+            font-size: 9px;
+            font-family: var(--mono);
+            background: rgba(52, 211, 153, .2);
+            color: var(--green);
+            padding: 2px 7px;
+            border-radius: 3px;
+            float: right;
+            margin-left: 8px;
+            margin-top: 2px
+        }
+
+        /* ── STEP 2: keyword arc diagram ── */
+        .arc-wrap {
+            width: 100%;
+            overflow-x: auto;
+            padding: 10px 0
+        }
+
+        .arc-wrap svg text {
+            font-family: 'JetBrains Mono', monospace
+        }
+
+        /* ── STEP 3: sentence scoring ── */
+        .score-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px
+        }
+
+        .score-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 9px 12px;
+            border-radius: 7px;
+            border: 1px solid var(--border);
+            background: var(--bg3);
+            transition: background .15s
+        }
+
+        .score-row:hover {
+            background: var(--bg4)
+        }
+
+        .score-bar-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            flex-shrink: 0;
+            width: 32px
+        }
+
+        .sbt {
+            width: 8px;
+            height: 56px;
+            background: var(--dim);
+            border-radius: 4px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end
+        }
+
+        .sbf {
+            width: 100%;
+            border-radius: 4px;
+            transition: height .6s ease
+        }
+
+        .sv {
+            font-size: 8px;
+            color: var(--muted);
+            font-family: var(--mono)
+        }
+
+        .sr-right {
+            flex: 1;
+            min-width: 0
+        }
+
+        .sr-text {
+            font-size: 11px;
+            color: var(--muted);
+            line-height: 1.5;
+            margin-bottom: 5px
+        }
+
+        .sr-text.sel {
+            color: var(--text)
+        }
+
+        .kw-wrap {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px
+        }
+
+        .kw {
+            font-size: 9px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: var(--mono)
+        }
+
+        /* ── STEP 4: summary ── */
+        .final-summary {
+            background: rgba(79, 158, 255, .06);
+            border: 1px solid rgba(79, 158, 255, .25);
+            border-radius: 9px;
+            padding: 14px 16px;
+            font-size: 13px;
+            color: var(--text);
+            line-height: 1.75
+        }
+
+        .final-label {
+            font-size: 10px;
+            font-family: var(--mono);
+            color: var(--muted);
+            margin-bottom: 8px
+        }
+
+        .sel-sent-list {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-bottom: 14px
+        }
+
+        /* ── ARC DIAGRAM (Step 2) ── */
+        .arc-diagram-wrap {
+            width: 100%;
+            overflow-x: auto
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div class="hbadge">CCE</div>
+        <div>
+            <div class="htitle">How the Summarizer Works</div>
+            <div class="hsub">Step-by-step visual · arc diagrams show keyword connections · select a preset and run
+            </div>
+        </div>
+    </header>
+
+    <div class="layout">
+
+        <!-- SIDEBAR -->
+        <div class="sidebar">
+            <div class="sb-sect">
+                <div class="sb-label">Sample texts</div>
+                <div class="preset on" onclick="loadPreset('fastapi',this)">
+                    <div class="preset-name">FastAPI + Backend</div>
+                    <div class="preset-tip">15 sentences · FastAPI, PostgreSQL, Docker, Redis, Kubernetes</div>
+                </div>
+                <div class="preset" onclick="loadPreset('machine_learning',this)">
+                    <div class="preset-name">Machine Learning</div>
+                    <div class="preset-tip">15 sentences · Neural nets, transformers, gradient descent</div>
+                </div>
+                <div class="preset" onclick="loadPreset('saas',this)">
+                    <div class="preset-name">SaaS Architecture</div>
+                    <div class="preset-tip">15 sentences · Auth, Stripe, Redis, Docker, scaling</div>
+                </div>
+            </div>
+            <div class="sb-sect" style="flex:1">
+                <div class="sb-label">Or paste your own</div>
+                <textarea id="tinp" placeholder="Paste any multi-sentence paragraph..."></textarea>
+                <button class="run-btn" id="runBtn" onclick="go()">▶ Run Summarizer</button>
+                <div class="tok-box" id="tokBox"></div>
+            </div>
+        </div>
+
+        <!-- MAIN -->
+        <div class="main" id="main">
+            <div class="empty-hero">
+                <div class="empty-icon">◈</div>
+                <div class="empty-title">Pick a sample text and click Run</div>
+                <div class="empty-sub">You'll see every step of extractive summarization visualized — sentences, keyword
+                    frequencies shown as arc diagrams, scores, and the final extracted summary.</div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        var activePreset = 'fastapi';
+        var running = false;
+
+        function loadPreset(name, el) {
+            activePreset = name;
+            document.querySelectorAll('.preset').forEach(function (p) { p.classList.remove('on') });
+            el.classList.add('on');
+            document.getElementById('tinp').value = '';
+        }
+
+        async function go() {
+            if (running) return;
+            running = true;
+            var btn = document.getElementById('runBtn');
+            btn.disabled = true; btn.textContent = '⏳ Analyzing...';
+            var userText = document.getElementById('tinp').value.trim();
+            var payload = userText ? { text: userText } : { preset: activePreset };
+            var main = document.getElementById('main');
+            main.innerHTML = '<div class="empty-hero"><div class="empty-icon" style="animation:spin 1s linear infinite">◈</div><div class="empty-title">Running summarizer...</div></div>';
+
+            try {
+                var resp = await fetch('/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                var data = await resp.json();
+                if (data.error) throw new Error(data.error);
+                await renderAll(data.result);
+            } catch (e) {
+                main.innerHTML = '<div class="empty-hero"><div class="empty-title" style="color:var(--red)">Error: ' + esc(e.message) + '</div></div>';
+            }
+            btn.disabled = false; btn.textContent = '↺ Run Again';
+            running = false;
+        }
+
+        async function renderAll(r) {
+            var main = document.getElementById('main');
+            main.innerHTML = '';
+
+            var selSet = new Set(r.selected);
+            var maxScore = r.scored.length ? Math.max.apply(null, r.scored.map(function (x) { return x.score })) : 1;
+            var maxFreq = r.freq.length ? r.freq[0][1] : 1;
+
+            // Token info
+            var tb = document.getElementById('tokBox');
+            tb.style.display = 'block';
+            tb.innerHTML = 'Sentences: <b>' + r.sentences.length + '</b>   Original: <b>' + r.original_tokens + ' tokens</b>   Summary: <b>' + r.summary_tokens + ' tokens</b>   Saved: <b>' + Math.round((1 - r.summary_tokens / r.original_tokens) * 100) + '%</b>';
+
+            // ── STEP 1: Sentences ──────────────────────────────────────────────
+            await pause(0);
+            var s1 = card(1, 'n1', 'Split into sentences', 'Each sentence becomes a candidate. Selected ones (in the final summary) are highlighted green.');
+            var list = el('div', 'sent-list');
+            r.sentences.forEach(function (s) {
+                var p = el('div', 'sent-pill' + (selSet.has(s) ? ' sel' : ''));
+                if (selSet.has(s)) { var t = el('span', 'sel-tag'); t.textContent = '✓ in summary'; p.appendChild(t); }
+                p.appendChild(document.createTextNode(s));
+                list.appendChild(p);
+            });
+            s1.body.appendChild(list);
+            main.appendChild(s1.card);
+
+            // ── STEP 2: Keyword frequency arc diagram ──────────────────────────
+            await pause(400);
+            var s2 = card(2, 'n2', 'Keyword frequency map', 'Words are laid out by frequency. Arcs connect keywords that appear in the same sentence — this is how the summarizer finds which sentences are most keyword-rich.');
+            var arcWrap = el('div', 'arc-diagram-wrap');
+            arcWrap.appendChild(buildFreqArcDiagram(r.freq, r.sentences, r.scored));
+            s2.body.appendChild(arcWrap);
+            main.appendChild(s2.card);
+
+            // ── STEP 3: Score each sentence ────────────────────────────────────
+            await pause(400);
+            var s3 = card(3, 'n3', 'Score each sentence', 'Score = (keywords matched ÷ total words) + length bonus. Green bar = high score = likely in summary. Chips show which keywords were found.');
+            var scoreList = el('div', 'score-list');
+            r.scored.forEach(function (item) {
+                var pct = maxScore > 0 ? item.score / maxScore : 0;
+                var col = pct > 0.6 ? '#34d399' : pct > 0.35 ? '#fbbf24' : '#f87171';
+                var row = el('div', 'score-row');
+                // bar
+                var bc = el('div', 'score-bar-col');
+                var bt = el('div', 'sbt');
+                var bf = el('div', 'sbf');
+                bf.style.height = Math.round(pct * 100) + '%';
+                bf.style.background = col;
+                bt.appendChild(bf); bc.appendChild(bt);
+                var sv = el('div', 'sv'); sv.textContent = item.score; bc.appendChild(sv);
+                // text
+                var right = el('div', 'sr-right');
+                var txt = el('div', 'sr-text' + (selSet.has(item.text) ? ' sel' : '')); txt.textContent = item.text.substring(0, 90) + (item.text.length > 90 ? '...' : ''); right.appendChild(txt);
+                if (item.hits.length) {
+                    var kw = el('div', 'kw-wrap');
+                    item.hits.slice(0, 7).forEach(function (h) {
+                        var k = el('span', 'kw'); k.textContent = h;
+                        k.style.background = 'rgba(52,211,153,.12)'; k.style.color = '#34d399';
+                        kw.appendChild(k);
+                    });
+                    right.appendChild(kw);
+                }
+                row.appendChild(bc); row.appendChild(right);
+                scoreList.appendChild(row);
+            });
+            s3.body.appendChild(scoreList);
+            main.appendChild(s3.card);
+
+            // ── STEP 4: Sentence-score arc diagram + final summary ─────────────
+            await pause(400);
+            var s4 = card(4, 'n4', 'Pick top sentences → final summary', 'Sentences are picked greedily by score, within the token budget, then re-ordered by original position. The arc diagram shows how scores connect to the final output.');
+            var arcWrap2 = el('div', 'arc-diagram-wrap');
+            arcWrap2.appendChild(buildSentenceArcDiagram(r.scored, r.selected));
+            s4.body.appendChild(arcWrap2);
+            var fl = el('div', 'final-label'); fl.textContent = 'Extracted meso summary (' + r.summary_tokens + ' tokens):';
+            var fb = el('div', 'final-summary'); fb.textContent = r.summary;
+            s4.body.appendChild(fl); s4.body.appendChild(fb);
+            main.appendChild(s4.card);
+            main.scrollTop = 0;
+        }
+
+        // ── Arc diagram: keywords laid out horizontally, arcs between co-occurring ones ──
+        function buildFreqArcDiagram(freq, sentences, scored) {
+            var words = freq.slice(0, 10).map(function (p) { return p[0]; });
+            var counts = {}; freq.forEach(function (p) { counts[p[0]] = p[1]; });
+            var maxC = freq.length ? freq[0][1] : 1;
+
+            var W = Math.max(700, words.length * 80);
+            var H = 240;
+            var padX = 40, padY = 20;
+            var nodeY = H - 60;
+
+            var svg = d3.create('svg').attr('width', '100%').attr('viewBox', '0 0 ' + W + ' ' + H).attr('font-family', 'JetBrains Mono,monospace');
+
+            // Position nodes evenly
+            var spacing = (W - padX * 2) / Math.max(words.length - 1, 1);
+            var pos = {};
+            words.forEach(function (w, i) { pos[w] = padX + i * spacing; });
+
+            // Find co-occurrences
+            var pairs = {};
+            sentences.forEach(function (sent) {
+                var present = words.filter(function (w) { return sent.toLowerCase().indexOf(w) >= 0; });
+                for (var i = 0; i < present.length; i++) {
+                    for (var j = i + 1; j < present.length; j++) {
+                        var key = present[i] + '|' + present[j];
+                        pairs[key] = (pairs[key] || 0) + 1;
+                    }
+                }
+            });
+
+            // Draw arcs
+            var arcG = svg.append('g');
+            Object.keys(pairs).forEach(function (key) {
+                var parts = key.split('|');
+                var x1 = pos[parts[0]], x2 = pos[parts[1]];
+                var midX = (x1 + x2) / 2;
+                var arcH = Math.min(Math.abs(x2 - x1) * 0.5, 120);
+                var strength = Math.min(pairs[key] / 3, 1);
+                arcG.append('path')
+                    .attr('d', 'M ' + x1 + ' ' + nodeY + ' C ' + x1 + ' ' + (nodeY - arcH) + ' ' + x2 + ' ' + (nodeY - arcH) + ' ' + x2 + ' ' + nodeY)
+                    .attr('fill', 'none')
+                    .attr('stroke', 'rgba(79,158,255,' + (0.15 + strength * 0.35) + ')')
+                    .attr('stroke-width', 1 + strength * 2)
+                    .append('title').text(parts[0] + ' ↔ ' + parts[1] + ': co-occur ' + pairs[key] + 'x');
+            });
+
+            // Draw nodes
+            var nodeG = svg.append('g');
+            words.forEach(function (w) {
+                var x = pos[w];
+                var pct = counts[w] / maxC;
+                var r = 6 + Math.round(pct * 10);
+                var col = 'rgba(52,211,153,' + (0.4 + pct * 0.6) + ')';
+                nodeG.append('circle').attr('cx', x).attr('cy', nodeY).attr('r', r).attr('fill', col).attr('stroke', 'rgba(52,211,153,.6)').attr('stroke-width', 1);
+                // word label below
+                nodeG.append('text').attr('x', x).attr('y', nodeY + r + 14).attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', '#dde5f5').text(w);
+                // count label above node
+                nodeG.append('text').attr('x', x).attr('y', nodeY - r - 5).attr('text-anchor', 'middle').attr('font-size', 9).attr('fill', 'rgba(52,211,153,.8)').text('×' + counts[w]);
+            });
+
+            // Legend
+            svg.append('text').attr('x', padX).attr('y', 16).attr('font-size', 9).attr('fill', '#4a6080').text('Arc = co-occur in same sentence · Node size & brightness = frequency · Hover arc for count');
+
+            return svg.node();
+        }
+
+        // ── Arc diagram: sentences as nodes, arcs to "SUMMARY" showing selection ──
+        function buildSentenceArcDiagram(scored, selected) {
+            var selSet = new Set(selected);
+            var items = scored.slice(0, 12);
+            var maxS = items.length ? Math.max.apply(null, items.map(function (x) { return x.score })) : 1;
+
+            var W = Math.max(800, items.length * 68);
+            var H = 280;
+            var padX = 44;
+            var nodeY = H - 70;
+            var summaryY = 48;
+            var summaryX = W / 2;
+
+            var spacing = (W - padX * 2) / Math.max(items.length - 1, 1);
+
+            var svg = d3.create('svg').attr('width', '100%').attr('viewBox', '0 0 ' + W + ' ' + H).attr('font-family', 'JetBrains Mono,monospace');
+
+            // Draw arcs from each sentence node up to the summary node
+            items.forEach(function (item, i) {
+                if (!selSet.has(item.text)) return;
+                var x = padX + i * spacing;
+                var pct = item.score / maxS;
+                svg.append('path')
+                    .attr('d', 'M ' + x + ' ' + nodeY + ' C ' + x + ' ' + (nodeY - 80 - pct * 40) + ' ' + summaryX + ' ' + (summaryY + 60) + ' ' + summaryX + ' ' + (summaryY + 28))
+                    .attr('fill', 'none')
+                    .attr('stroke', 'rgba(52,211,153,' + (0.25 + pct * 0.55) + ')')
+                    .attr('stroke-width', 1.5 + pct * 2.5)
+                    .attr('stroke-dasharray', '4 3')
+                    .append('title').text('Score: ' + item.score + '\n' + item.text.substring(0, 60));
+            });
+
+            // Summary node at top
+            var sg = svg.append('g');
+            sg.append('rect').attr('x', summaryX - 52).attr('y', summaryY - 14).attr('width', 104).attr('height', 28).attr('rx', 6).attr('fill', 'rgba(79,158,255,.15)').attr('stroke', 'rgba(79,158,255,.5)').attr('stroke-width', 1.5);
+            sg.append('text').attr('x', summaryX).attr('y', summaryY + 4).attr('text-anchor', 'middle').attr('font-size', 11).attr('font-weight', '500').attr('fill', '#4f9eff').text('SUMMARY');
+
+            // Sentence nodes
+            items.forEach(function (item, i) {
+                var x = padX + i * spacing;
+                var pct = item.score / maxS;
+                var inSum = selSet.has(item.text);
+                var col = inSum ? 'rgba(52,211,153,' + (0.5 + pct * 0.5) + ')' : 'rgba(248,113,113,.35)';
+                var stroke = inSum ? 'rgba(52,211,153,.8)' : 'rgba(248,113,113,.4)';
+                var r = 7 + Math.round(pct * 9);
+                svg.append('circle').attr('cx', x).attr('cy', nodeY).attr('r', r).attr('fill', col).attr('stroke', stroke).attr('stroke-width', 1.5).append('title').text((inSum ? '✓ Selected\n' : '✗ Not selected\n') + 'Score: ' + item.score + '\n' + item.text.substring(0, 70));
+                svg.append('text').attr('x', x).attr('y', nodeY - r - 5).attr('text-anchor', 'middle').attr('font-size', 8).attr('fill', inSum ? '#34d399' : '#f87171').text(item.score);
+                // sentence number
+                svg.append('text').attr('x', x).attr('y', nodeY + r + 13).attr('text-anchor', 'middle').attr('font-size', 9).attr('fill', '#4a6080').text('S' + (i + 1));
+            });
+
+            // Legend
+            svg.append('circle').attr('cx', padX).attr('cy', H - 18).attr('r', 5).attr('fill', 'rgba(52,211,153,.6)');
+            svg.append('text').attr('x', padX + 10).attr('y', H - 14).attr('font-size', 9).attr('fill', '#4a6080').text('= selected for summary');
+            svg.append('circle').attr('cx', padX + 140).attr('cy', H - 18).attr('r', 5).attr('fill', 'rgba(248,113,113,.5)');
+            svg.append('text').attr('x', padX + 150).attr('y', H - 14).attr('font-size', 9).attr('fill', '#4a6080').text('= not selected  ·  node size = score  ·  dashed arc = contribution to summary');
+
+            return svg.node();
+        }
+
+        // ── Helpers ──
+        function card(n, numCls, title, sub) {
+            var c = el('div', 'step-card');
+            var h = el('div', 'step-hdr');
+            var num = el('div', 'step-num ' + numCls); num.textContent = n;
+            var info = el('div', '');
+            var t = el('div', 'step-title'); t.textContent = title;
+            var s = el('div', 'step-sub'); s.textContent = sub;
+            info.appendChild(t); info.appendChild(s);
+            h.appendChild(num); h.appendChild(info);
+            var body = el('div', 'step-body');
+            c.appendChild(h); c.appendChild(body);
+            return { card: c, body: body };
+        }
+        function el(tag, cls) { var d = document.createElement(tag); if (cls) d.className = cls; return d; }
+        function pause(ms) { return new Promise(function (r) { setTimeout(r, ms) }); }
+        function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+    </script>
+</body>
+
+</html>
