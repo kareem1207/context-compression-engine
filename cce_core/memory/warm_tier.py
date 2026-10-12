@@ -279,6 +279,11 @@ class WarmTier:
             return []
 
         qvec = query_embedding.astype(np.float32)
+        if qvec.shape[0] != self._matrix.shape[1]:
+            raise ValueError(
+                f"Stored embeddings have {self._matrix.shape[1]} dimensions but the active embedder produces "
+                f"{qvec.shape[0]}. Use the same embedder (CCE_EMBEDDER) that created these sessions."
+            )
 
         # If session filter, operate on subset
         if session_id:

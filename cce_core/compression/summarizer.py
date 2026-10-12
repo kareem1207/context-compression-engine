@@ -100,6 +100,69 @@ def _extractive_summarize(text: str, max_tokens: int) -> str:
 
 # ── LLM backend ───────────────────────────────────────────────────────────────
 
+_FACT_CUES = re.compile(
+    r"(remember|note|by the way|for the record|just so you know|my|our|we|located|every|always|never|must|"
+    r"deadline|budget|password|name|name is|codename|allergic|booked)",
+    re.IGNORECASE,
+)
+_ACK = re.compile(r"^(got it|noted|understood|thanks|thank you|ok|okay|sure|of course)", re.IGNORECASE)
+_MID_CAPS = re.compile(r"(?<![.!?]\s)(?<!^)[A-Z][a-z]{2,}")
+
+
+def _detail_bonus(sentence: str, role: str) -> float:
+    """
+    Extra score for sentences that usually carry facts, so a short statement such as
+    "Our deploy window is Tuesday at 3 AM" is not lost behind longer, more generic sentences.
+    """
+    bonus = 0.0
+    if role == "assistant":
+        bonus += 0.15
+    if sentence.rstrip().endswith("?"):
+        bonus -= 0.35                      # questions rarely hold the answer
+    if _ACK.match(sentence.strip()) and len(sentence.split()) <= 12:
+        bonus -= 0.6                       # "Got it, I will remember that."
+    if re.search(r"\d", sentence):
+        bonus += 0.3                       # numbers, dates, amounts
+    bonus += min(len(_MID_CAPS.findall(sentence)), 3) * 0.08   # names and places
+    if role == "user" and _FACT_CUES.search(sentence):
+        bonus += 0.25
+    return bonus
+
+
+def _extractive_summarize_turns(turns: list[Turn], max_tokens: int) -> str:
+    """Pick the best sentences across turns, favouring facts, then restore conversation order."""
+    items: list[tuple[int, str, str]] = []   # (order, role, sentence)
+    for t in turns:
+        for sent in (x.strip() for x in _SENT_RE.split(t.content) if x.strip()):
+            items.append((len(items), t.role, sent))
+    if not items:
+        return ""
+    if len(items) == 1:
+        return tokenizer.truncate_to_tokens(items[0][2], max_tokens)
+
+    text = " ".join(sent for _, _, sent in items)
+    freq = Counter(w for w in _WORD_RE.findall(text.lower()) if w not in _STOPWORDS)
+    top_words = {w for w, _ in freq.most_common(20)}
+
+    scored = []
+    for order, role, sent in items:
+        base = _score_sentences([sent], top_words)[0][0]
+        scored.append((base + _detail_bonus(sent, role), order, sent))
+    scored.sort(key=lambda x: -x[0])
+
+    picked, used = [], 0
+    for score, order, sent in scored:
+        cost = tokenizer.count(sent)
+        if used + cost > max_tokens:
+            continue                       # a shorter, lower-ranked sentence may still fit
+        picked.append((order, sent))
+        used += cost
+    if not picked:
+        return tokenizer.truncate_to_tokens(scored[0][2], max_tokens)
+    picked.sort()
+    return " ".join(sent for _, sent in picked)
+
+
 def _llm_summarize(text: str, max_tokens: int, config: CCEConfig) -> str:
     """
     Call local LLM (llama.cpp OpenAI-compat endpoint) for higher-quality
@@ -176,6 +239,8 @@ class Summarizer:
         """
         if chunk.token_count <= self.config.meso_max_tokens:
             return chunk.text
+        if self.config.summarizer_mode != "llm" and self.config.detail_summaries:
+            return _extractive_summarize_turns(chunk.turns, self.config.meso_max_tokens)
         return self._summarize(chunk.text, self.config.meso_max_tokens)
 
     # ── Macro (per-session) ───────────────────────────────────────────────────

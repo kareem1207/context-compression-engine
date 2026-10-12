@@ -6,7 +6,7 @@ It runs fully offline by default (no LLM is needed to compress) and plugs into a
 
 **[Try the live demo in your browser](https://kareem1207.github.io/context-compression-engine/)**: paste a conversation, see it split into topics, ask a question and compare the context a model would receive with the full history.
 
-> **Status: working prototype (v0.1).** The core engine, memory tiers, retrieval, sessions, MCP server, REST API, JavaScript client and a live dashboard are implemented and tested. A small first benchmark is in [`benchmarks/`](benchmarks/README.md): on two local models CCE matched full-history accuracy with about 86% fewer tokens. It is a 12-question synthetic test, so treat it as a smoke test, not proof.
+> **Status: working prototype (v0.1).** The core engine, memory tiers, retrieval, sessions, MCP server, REST API, JavaScript client and a live dashboard are implemented and tested. Benchmarks are in [`benchmarks/`](benchmarks/README.md). On local models, CCE found facts said long ago with about 90% fewer tokens than resending the chat, and far more often than sending the newest messages that fit. **But a plain search over raw messages does just as well at finding a single stated fact**, and we have not yet tested the cases where summaries should help. Read the limits before relying on it.
 
 ---
 
@@ -49,12 +49,21 @@ Or install it into your own project straight from GitHub (it is not on PyPI yet)
 
 ```bash
 pip install "context-compression-engine[all] @ git+https://github.com/kareem1207/context-compression-engine"
-# extras: [rest] REST API, [mcp] MCP server, [ui] dashboard; the base install is the engine only
+# extras: [neural] recommended embedder, [rest] REST API, [mcp] MCP server, [ui] dashboard;
+# the base install is the light engine (hashing embedder, no PyTorch)
 ```
 
 This also gives you two commands: `cce-rest` (the REST API) and `cce-mcp` (the MCP server).
 
-The first run downloads the embedding model (`sentence-transformers/all-MiniLM-L6-v2`, roughly 90 MB) from Hugging Face. After that it works offline.
+**Two embedders.** The engine needs one to find topics and match questions:
+
+| | `neural` (recommended) | `hash` |
+|---|---|---|
+| Install | `pip install "...[neural]"` (pulls in PyTorch, about 1 GB) | nothing extra |
+| Understands paraphrase | yes | no, matches shared words only |
+| Held-out recall in our test | 99% | 55% (lexical 100%, paraphrase 10%) |
+
+`CCE_EMBEDDER=auto` (the default) uses neural when installed and hashing otherwise. The first neural run downloads `sentence-transformers/all-MiniLM-L6-v2` (about 90 MB) from Hugging Face, then works offline. Do not mix embedders within one stored session: the engine will raise a clear error if you try.
 
 ### Use it as a library
 
@@ -206,7 +215,7 @@ All tunables live in [`cce_core/config.py`](cce_core/config.py) (`CCEConfig`). H
 | `retrieval_recency_boost` | `0.2` | bonus for recent chunks |
 | `context_max_tokens` | `2048` | hard cap on the assembled context |
 
-Environment variables: `CCE_DATA_DIR` (storage folder, default `.cce_data`), `CCE_LLM_ENDPOINT`, `CCE_LLM_MODEL`, and for the MCP server `CCE_SUMMARIZER_MODE`, `CCE_HOT_TIER_TURNS`, `CCE_TOP_K`, `CCE_MAX_TOKENS`.
+Environment variables: `CCE_EMBEDDER` (`auto`, `neural` or `hash`), `CCE_DATA_DIR` (storage folder, default `.cce_data`), `CCE_LLM_ENDPOINT`, `CCE_LLM_MODEL`, and for the MCP server `CCE_SUMMARIZER_MODE`, `CCE_HOT_TIER_TURNS`, `CCE_TOP_K`, `CCE_MAX_TOKENS`.
 
 ---
 
@@ -250,10 +259,11 @@ cd cce_sdk_js && npm test                            # JavaScript: client and of
 ## Roadmap
 
 - [x] REST API (`cce_rest`), JavaScript client and offline engine (`cce_sdk_js`), browser demo
-- [x] First benchmark (12 questions, two local models), see [`benchmarks/`](benchmarks/README.md)
+- [x] Benchmarks on real chat text (retrieval, window overflow, two local models), see [`benchmarks/`](benchmarks/README.md)
 - [x] MIT licence, packaging metadata, optional API key for the REST API
-- [ ] Bigger benchmark: more conversations, chats longer than the model window, a hosted model, and real (not synthetic) data
-- [ ] Better summaries: the default extractive summariser only picks sentences
+- [ ] Test what plain retrieval cannot do: questions that need a summary of a whole topic or session
+- [ ] Benchmark on messy real conversations and with a hosted model
+- [ ] Better summaries: the default extractive summariser only picks sentences (a model-written option exists but is untested)
 - [ ] Publish to PyPI (`context-compression-engine`) and npm (`cce-client`)
 - [ ] Optional ANN index for large warm tiers
 

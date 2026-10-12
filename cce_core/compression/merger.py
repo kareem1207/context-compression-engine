@@ -17,6 +17,7 @@ This keeps the warm tier lean.
 from __future__ import annotations
 
 import uuid
+import base64
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -24,6 +25,20 @@ import numpy as np
 
 from cce_core.compression.chunker import Chunk
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
+
+
+def encode_turn_vecs(vecs: np.ndarray) -> dict:
+    """Per-turn embeddings as compact JSON-safe data (float16, base64)."""
+    a = np.asarray(vecs, dtype=np.float16)
+    return {"dim": int(a.shape[1]), "data": base64.b64encode(a.tobytes()).decode("ascii")}
+
+
+def decode_turn_vecs(metadata: dict) -> np.ndarray | None:
+    """Inverse of encode_turn_vecs; None for nodes created before turn vectors existed."""
+    tv = (metadata or {}).get("turn_vecs")
+    if not tv:
+        return None
+    return np.frombuffer(base64.b64decode(tv["data"]), dtype=np.float16).astype(np.float32).reshape(-1, tv["dim"])
 
 
 @dataclass
@@ -153,5 +168,8 @@ class Merger:
             turn_end=chunk.end_index,
             token_count=chunk.token_count,
             created_at=datetime.now(timezone.utc),
-            metadata=chunk.metadata.copy(),
+            metadata={
+                **chunk.metadata,
+                **({"turn_vecs": encode_turn_vecs(chunk.turn_embeddings)} if chunk.turn_embeddings is not None else {}),
+            },
         )

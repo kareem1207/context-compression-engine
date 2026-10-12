@@ -12,6 +12,12 @@ import os
 @dataclass
 class CCEConfig:
     # ── Embedding model ───────────────────────────────────────────────────────
+    # "auto" uses the neural model if sentence-transformers is installed, otherwise the
+    # dependency-free hashing embedder. Force one with "neural" or "hash" (or CCE_EMBEDDER).
+    embedder: str = os.getenv("CCE_EMBEDDER", "auto")
+    hash_dim: int = 512
+    # Hash embeddings score lower than neural ones for the same topic, so they need a lower threshold.
+    hash_chunk_similarity_threshold: float = 0.10
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384          # all-MiniLM-L6-v2 output dimension
     embedding_batch_size: int = 32    # how many sentences to embed at once
@@ -31,6 +37,9 @@ class CCEConfig:
     macro_max_tokens: int = 400
 
     # summarizer backend: "extractive" (no LLM needed) | "llm" (calls local LLM)
+    # Extractive summaries favour sentences that carry facts (numbers, names, "our/my ..." statements)
+    # over generic ones. Turn off to get the plain sentence-frequency behaviour.
+    detail_summaries: bool = True
     summarizer_mode: str = "extractive"
     llm_endpoint: str = os.getenv("CCE_LLM_ENDPOINT", "http://localhost:8080/v1")
     llm_model: str = os.getenv("CCE_LLM_MODEL", "gemma4")

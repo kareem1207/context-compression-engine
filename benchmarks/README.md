@@ -1,60 +1,84 @@
-# Benchmark: does CCE keep answers right with far fewer tokens?
+# Benchmarks
 
-**Short answer from this run:** on both local models tested, CCE answered as accurately as sending the whole conversation (Gemma 11/12 vs 11/12, DeepSeek 8/12 vs 7/12) while sending about **86% fewer tokens**. A naive "just send the most recent messages" baseline with the same token budget found **0 of 12** facts. On Gemma, which cannot reuse a cached prompt, answering was also about **7.6x faster** on a CPU; on DeepSeek, where the server cached the shared history, the speed advantage disappeared (see the note below the table).
+**The honest summary.** CCE lets a small local model answer questions about things said long ago, using about 90% fewer tokens than resending the chat, and it beats "send everything" and "send the newest messages that fit". But **a plain search over the raw messages with the same token budget finds the facts just as reliably** (100% vs CCE's 99% in the model-free check below). So these tests show that CCE's *retrieval* works; they do **not** show that its topic structure or summaries beat ordinary retrieval. We have not yet tested the cases where summaries should matter (see [What is not tested](#what-is-not-tested)).
 
-This is a small, synthetic test. Read [What this does and does not show](#what-this-does-and-does-not-show) before quoting it.
+All tests use local models through llama.cpp on a laptop CPU (AMD Ryzen 7 7730U, no GPU), temperature 0, thinking mode off.
 
-## The test
+## How the tests work
 
-A 120-turn conversation (about 3,500 tokens) drifts across six everyday topics (billing, cooking, running, Python, travel, fitness). Twelve facts are mentioned **once, in passing** (for example "our staging database password rotates every 45 days"), somewhere in the first 80% of the chat, between 12 and 56 exchanges before the end. Afterwards the model is asked 12 questions, one per fact. Six reuse the fact's own words ("lexical"), six rephrase it ("paraphrase"). An answer counts as correct if it contains the expected keywords.
+A conversation is built from **real chat text** (UltraChat 200k, MIT licence, downloaded on first run and not stored in this repo) with 8 facts planted once, in passing, in the first 80% of the chat (for example "our staging database password rotates every 45 days", with randomised values). After the chat, the model is asked one question per fact: half reuse the fact's wording ("lexical"), half rephrase it ("paraphrase"). An answer is correct if it contains the expected keywords. Conversations are different for every seed, so nothing can be memorised.
 
-Three ways of building the prompt for each question:
+Prompts compared for the same question:
 
 | Condition | What the model receives |
 |---|---|
-| **full** | the entire conversation, then the question |
-| **recent** | only the newest turns, cut to the same token budget CCE used (a fair naive baseline) |
-| **cce** | CCE's context: the best-matching topic blocks plus the last 4 turns, then the question |
-
-CCE settings: extractive summariser, MiniLM embeddings, 4 recent turns kept verbatim, top 3 topics, 200-token summary budget per topic. Models run through llama.cpp on a laptop CPU (AMD Ryzen 7 7730U, no GPU), temperature 0, thinking mode off.
+| **full** | the whole conversation, then the question (only when it fits the model's window) |
+| **window** | the newest turns that fit the window, then the question: what most apps do when a chat gets too long |
+| **recent** | the newest turns, cut to the **same token budget CCE used** (fair, naive) |
+| **cce** | CCE's context: best-matching topic blocks plus the last 4 turns (neural embedder) |
+| **cce_hash** | the same, with the dependency-free hashing embedder |
 
 ## Results
 
-| Model | Condition | Correct | Mean prompt tokens | Mean prompt processing time |
+### Chats that fit the model's window (about 5,300 tokens, context 8,192)
+
+DeepSeek-Coder 6.7B Instruct, 3 conversations x 8 questions = 24 questions:
+
+| Condition | Correct | Mean prompt tokens |
+|---|---|---|
+| full | 10 / 24 (42%) | 5,910 |
+| recent (same budget as CCE) | 0 / 24 (0%) | 641 |
+| **CCE** | **19 / 24 (79%)** | **697** |
+| CCE, hashing embedder | 11 / 24 (46%) | 851 |
+
+More context made this model worse, not better: with the whole chat in the prompt it got fewer answers right than with CCE's short context.
+
+### Chats longer than the window (about 9,300 tokens, context 4,096)
+
+| Model | window | recent | **CCE** | CCE hashing |
 |---|---|---|---|---|
-| Gemma 4 E4B (Q4_K_M) | full | 11 / 12 | 3,521 | 87.7 s |
-| | recent (same budget) | 0 / 12 | 429 | 7.1 s |
-| | **CCE** | **11 / 12** | **495** | **11.5 s** |
-| DeepSeek-Coder 6.7B Instruct | full | 7 / 12 | 3,980 | 22.4 s |
-| | recent (same budget) | 0 / 12 | 524 | 14.3 s |
-| | **CCE** | **8 / 12** | **534** | 20.0 s |
+| DeepSeek-Coder 6.7B (24 questions) | 1 / 24 (4%) | 0 / 24 | **18 / 24 (75%)** | 12 / 24 (50%) |
+| Gemma 4 E4B (16 questions) | 1 / 16 (6%) | 0 / 16 | **16 / 16 (100%)** | 8 / 16 (50%) |
 
-**Speed note.** Prompt-processing time is only a fair comparison when the server cannot reuse earlier work. Gemma 4 uses sliding-window attention, so llama.cpp reprocessed the whole history for every question (87.7 s vs 11.5 s). DeepSeek-Coder let llama.cpp cache the history that every "full" prompt shares, so those prompts were cheap (22.4 s vs 20.0 s). The token saving is real in both cases, and it is what you pay for with a hosted API; the time saving depends on your server.
+Mean CCE prompt size: 778 and 687 tokens, against 3,675 and 3,184 for the window. This is the case CCE is for: the model cannot see most of the chat, and CCE brings back the relevant part.
 
-By question type (Gemma): lexical 6/6 for both full and CCE; paraphrase 5/6 for both. Raw per-question answers are in [`results/`](results). CCE also costs about 2.7 s per question to build the context on this CPU (it recompresses the whole chat each time in stateless mode; a stored session does this once).
+### Model-free check: is the needed fact in the context?
 
-Two questions are worth a look:
-- Gemma with the full history said "not mentioned" for one fact that CCE's shorter context got right: **more context is not always better** for a small model.
-- CCE missed one paraphrase ("how much do we lose to processing costs on each sale") that the full prompt got right: paraphrases are where retrieval can fail.
+96 questions on 12 conversations that were **not used while developing** (seeds 500 to 511). No LLM involved, so it is fast and exact.
 
-## What this does and does not show
+| Method | Fact present | Mean context tokens |
+|---|---|---|
+| CCE (neural embedder) | 95 / 96 (99%) | 611 |
+| CCE, detail-aware summaries switched off | 95 / 96 (99%) | 607 |
+| CCE, hashing embedder | 53 / 96 (55%): lexical 48/48, paraphrase 5/48 | 752 |
+| **Plain RAG over raw messages, same budget** | **96 / 96 (100%)** | same as CCE |
 
-It shows that, when the needed fact lives in an older topic, retrieving the right topic block recovers it, and that doing so is much cheaper than resending everything.
+Findings:
+- Turn-level retrieval is what makes CCE find facts: ranking topics only by their average vector missed 5 of 32 on the first look (84%), judging topics by their best-matching message fixed that (32 of 32 on those conversations, 99% on the held-out ones).
+- The detail-aware summariser made no measurable difference here, because facts are recovered by retrieval and quoting, not by summarising.
+- The hashing embedder needs no downloads but only matches shared words: perfect on lexical questions, almost useless on paraphrased ones.
+- **Plain RAG matches CCE.** On "find one stated fact" tasks, CCE adds nothing over simply retrieving the best raw messages.
 
-It does **not** show:
-- **General quality.** Twelve questions on one synthetic conversation is a smoke test. One question is 8 percentage points, so the DeepSeek result (CCE 8/12 vs full 7/12) is a tie, not a win.
-- **Summarisation quality.** Most topic blocks in this chat were shorter than the 200-token summary budget, so they were kept verbatim. The savings here come from **retrieval** (sending only relevant topics), not from summarising. Longer topics would be summarised by a simple sentence-picking method that can drop details.
-- **Long contexts.** The whole conversation fit in the model's window. The gap should widen for chats that do not fit, but that is not measured here.
-- **Other models, other languages, or messy real conversations.**
-- The two prompt-processing times are single CPU runs and depend on this machine.
+### Earlier, smaller run (12 questions, one hand-written chat)
+
+Gemma 11/12 with the whole chat and 11/12 with CCE; DeepSeek 7/12 and 8/12; newest-turns-only 0/12 for both. Kept in `results/gemma4-e4b.json` and `results/deepseek-coder-6.7b.json`. `results/v1-invalid-harness/` is a first attempt that wrongly showed CCE at 25%: the model's thinking mode used up the token limit and returned empty answers. That was a flaw in the test, not in CCE; it is kept on purpose.
+
+## What is not tested
+
+- **Questions that need a summary or the whole picture** ("what did we decide about billing overall?", "what changed since Monday?"). A plain search over raw messages should struggle here, and this is where topic summaries could earn their place. This is the next test to write.
+- **Messy real conversations.** Filler is real text, but the facts are planted statements. Real chats have corrections, references like "that one" and facts spread across many turns.
+- **Much longer chats**, hosted models, other languages, and larger sample sizes. 16 to 24 questions per cell is small: one question is 4 to 6 percentage points, so differences of one or two questions are noise.
+- **Speed.** Prompt-processing time depends on the server: Gemma 4 cannot reuse a cached prompt, DeepSeek can. The token saving is real in both cases; the time saving depends on your setup.
+- **The language model summariser** (`summarizer_mode="llm"`).
 
 ## Reproduce
 
 ```bash
-# 1. start a llama.cpp server with any GGUF model
-llama-server -m model.gguf --port 8080 --ctx-size 8192
-# 2. run the benchmark (writes benchmarks/results/<label>.json)
-uv run python benchmarks/run_benchmark.py --label my-model
+uv sync --group bench
+# model-free recall (fast, no LLM)
+uv run python benchmarks/retrieval_recall.py --conversations 12 --variants cce,cce_hash
+# model benchmarks: needs llama.cpp and two GGUF files, about two hours on a CPU
+bash benchmarks/run_all_v2.sh              # or: RUNS="overflow" bash benchmarks/run_all_v2.sh
 ```
 
-`dataset.py` is deterministic (seeded), so the same conversation and questions are generated every time. The first run in `results/v1-invalid-harness/` is kept on purpose: the model's thinking mode used up the token limit and returned empty answers, which made CCE look like 25%. That was a flaw in the test harness, not in CCE, and was fixed before the results above.
+Data is deterministic per seed (`dataset_real.py`). Raw per-question answers are in `results/`.

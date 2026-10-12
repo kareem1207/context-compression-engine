@@ -292,6 +292,11 @@ class ContextBuilder:
         header = f"[Topic: {node.topic_label}] (turns {node.turn_start}-{node.turn_end})"
         lines = [header, node.meso_summary]
 
+        # Quote the best-matching message when the summary left it out.
+        best = (result.best_turn or "").strip()
+        if best and best[:40] not in node.meso_summary:
+            lines.append(f"Most relevant: {tokenizer.truncate_to_tokens(best, 60)}")
+
         if include_micro and node.micro_summaries:
             for micro in node.micro_summaries:
                 lines.append(f"  - {micro}")
