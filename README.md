@@ -45,12 +45,13 @@ cd context-compression-engine
 uv sync
 ```
 
-Or install it into your own project straight from GitHub (it is not on PyPI yet):
+Or install it into your own project from PyPI:
 
 ```bash
-pip install "context-compression-engine[all] @ git+https://github.com/kareem1207/context-compression-engine"
-# extras: [neural] recommended embedder, [rest] REST API, [mcp] MCP server, [ui] dashboard;
-# the base install is the light engine (hashing embedder, no PyTorch)
+pip install "context-compression-engine[neural]"          # recommended: engine + the neural embedder
+pip install "context-compression-engine[all]"             # everything: neural, REST API, MCP server, dashboard
+pip install context-compression-engine                    # the light engine only (hashing embedder, no PyTorch)
+# extras: [neural] embedder, [rest] REST API, [mcp] MCP server, [ui] dashboard
 ```
 
 This also gives you two commands: `cce-rest` (the REST API) and `cce-mcp` (the MCP server).
@@ -183,7 +184,7 @@ const out = createEngine().process(messages, "what did we decide about billing?"
 console.log(out.stats.savedPercent, out.payload.toMessages());
 ```
 
-The package is not on npm yet (it will be `cce-client`); import the files from the repo for now. **CCE Lite** swaps the neural sentence model for a lightweight word-hashing embedder, so it needs no downloads but is less semantic than the Python engine.
+Install it with `npm install cce-client`. **CCE Lite** swaps the neural sentence model for a lightweight word-hashing embedder, so it needs no downloads but is less semantic than the Python engine.
 
 ### See it work
 
