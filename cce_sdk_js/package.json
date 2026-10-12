@@ -1,0 +1,19 @@
+{
+  "name": "cce-client",
+  "version": "0.1.0",
+  "description": "JavaScript client and offline engine for the Context Compression Engine: compact memory for long AI conversations.",
+  "type": "module",
+  "main": "index.js",
+  "types": "types.d.ts",
+  "exports": {
+    ".": { "types": "./types.d.ts", "default": "./index.js" },
+    "./lite": { "types": "./types.d.ts", "default": "./lite.js" }
+  },
+  "files": ["index.js", "client.js", "lite.js", "sample.js", "types.d.ts"],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=18" },
+  "keywords": ["llm", "memory", "context", "compression", "mcp", "rag"],
+  "repository": { "type": "git", "url": "git+https://github.com/kareem1207/context-compression-engine.git" }
+}

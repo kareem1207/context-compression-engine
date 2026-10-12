@@ -4,7 +4,9 @@ A memory layer for AI assistants. CCE turns a long conversation into compact, se
 
 It runs fully offline by default (no LLM is needed to compress) and plugs into any model through an **MCP server**, or directly as a Python library.
 
-> **Status: working prototype (v0.1).** The core engine, memory tiers, retrieval, sessions, MCP server and a live dashboard are implemented. The standalone REST package and JavaScript SDK are placeholders (see [Roadmap](#roadmap)). Compression-ratio and quality benchmarks have not been published yet, so this README makes no numeric claims.
+**[Try the live demo in your browser](https://kareem1207.github.io/context-compression-engine/)**: paste a conversation, see it split into topics, ask a question and compare the context a model would receive with the full history.
+
+> **Status: working prototype (v0.1).** The core engine, memory tiers, retrieval, sessions, MCP server, REST API, JavaScript client and a live dashboard are implemented and tested. Benchmarks of answer quality have not been published yet, so this README makes no claims about that.
 
 ---
 
@@ -122,6 +124,47 @@ Example MCP client configuration (adjust the path):
 
 See [`examples/mcp_claude_demo.md`](examples/mcp_claude_demo.md) for a walkthrough.
 
+### Use it over HTTP (any language)
+
+```bash
+uv run python -m cce_rest.app        # http://localhost:9100  (interactive docs at /docs)
+```
+
+| Endpoint | What it does |
+|---|---|
+| `POST /v1/compress` | one-shot: send `messages` and a `query`, get the context back; nothing is stored |
+| `POST /v1/sessions/{id}/messages` | add messages to a stored session |
+| `POST /v1/sessions/{id}/context` | get compressed context for a query |
+| `GET /v1/sessions/{id}/summary` | macro summary of the session |
+| `GET /v1/sessions/{id}/stats` | tier occupancy and token counts |
+| `POST /v1/sessions/{id}/close`, `DELETE /v1/sessions/{id}` | checkpoint and close, or delete |
+| `GET /v1/sessions`, `GET /health` | list sessions, health check |
+
+```bash
+curl -X POST localhost:9100/v1/compress -H "Content-Type: application/json"   -d '{"messages":[{"role":"user","content":"..."}], "query":"what did we decide?"}'
+```
+
+Configuration comes from the `CCE_*` variables below; set `CCE_CORS_ORIGINS` (comma separated) to allow browser apps.
+
+### Use it from JavaScript
+
+[`cce_sdk_js`](cce_sdk_js) has two parts, no dependencies, Node 18+ and browsers:
+
+```js
+// 1) Talk to the REST API above
+import { CCEClient } from "cce-client";
+const cce = new CCEClient({ baseUrl: "http://localhost:9100" });
+await cce.addMessages("chat-1", messages);
+const { context } = await cce.getContext("chat-1", "what did we decide about billing?");
+
+// 2) Or run the engine offline, in-process (this is what the live demo uses)
+import { createEngine } from "cce-client/lite";
+const out = createEngine().process(messages, "what did we decide about billing?");
+console.log(out.stats.savedPercent, out.payload.toMessages());
+```
+
+The package is not published to npm yet; import the files from the repo for now. **CCE Lite** swaps the neural sentence model for a lightweight word-hashing embedder, so it needs no downloads but is less semantic than the Python engine.
+
 ### See it work
 
 ```bash
@@ -167,7 +210,10 @@ cce_core/
   session/       stateful session manager, stateless processor
   engine.py      CCEEngine: the single entry point
 cce_mcp/         MCP server (stdio) and a small HTTP demo bridge
+cce_rest/        FastAPI REST API
+cce_sdk_js/      JavaScript client (client.js) and offline engine (lite.js), with tests
 cce_ui/          live dashboard
+docs/            the GitHub Pages demo (built together with cce_sdk_js/lite.js)
 examples/        demos and showcases
 tests/           pytest suites for chunker, summariser, memory store, retriever, sessions
                  and an end-to-end test that needs a local LLM
@@ -176,25 +222,27 @@ tests/           pytest suites for chunker, summariser, memory store, retriever,
 ## Tests
 
 ```bash
-uv run pytest --ignore=tests/test_e2e_gemma.py
+uv run pytest --ignore=tests/test_e2e_gemma.py      # Python: engine, memory, sessions, REST
+cd cce_sdk_js && npm test                            # JavaScript: client and offline engine
 ```
 
-`tests/test_e2e_gemma.py` needs a running llama.cpp server. (Note: `tests/` is currently listed in `.gitignore`; remove that line so contributors and CI see the tests.)
+`tests/test_e2e_gemma.py` needs a running llama.cpp server, so CI skips it. The first Python run downloads the embedding model.
 
 ## Design notes and limits
 
 - **Search is brute-force cosine similarity over a NumPy matrix.** For the default warm-tier size (hundreds of chunks) this beats building an ANN index and keeps dependencies small. It is not meant for millions of chunks.
+- **Compression only kicks in once a topic is longer than the summary budget** (`meso_max_tokens`). Short topics are kept as they are.
 - **The extractive summariser picks sentences; it does not paraphrase.** Use `llm` mode for more fluent summaries when a model is available.
 - **SQLite is accessed with a lock** (single writer, many readers): fine for local use, not a multi-server deployment.
 - Compression ratio is reported per run by `engine.compression_stats(...)`. There is no published benchmark yet.
 
 ## Roadmap
 
-- [ ] Implement the `cce_rest` FastAPI package (currently empty files; `cce_mcp/server_http.py` is a demo-only stand-in)
-- [ ] Implement the `cce_sdk_js` npm client (currently empty placeholders)
-- [ ] Packaging for PyPI and npm
-- [ ] Published benchmarks: compression ratio and answer quality with and without CCE
-- [ ] Add a licence file
+- [x] REST API (`cce_rest`), JavaScript client and offline engine (`cce_sdk_js`), browser demo
+- [ ] Publish to PyPI and npm
+- [ ] Published benchmarks: answer quality with and without CCE
+- [ ] Add a licence file (none yet, so by default all rights are reserved)
+- [ ] Authentication for the REST API before exposing it beyond localhost
 - [ ] Optional ANN index for large warm tiers
 
 ## Author
