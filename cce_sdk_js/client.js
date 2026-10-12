@@ -14,9 +14,10 @@ export class CCEError extends Error {
 
 export class CCEClient {
   /**
-   * @param {{ baseUrl?: string, fetch?: typeof fetch, timeoutMs?: number }} [options]
+   * @param {{ baseUrl?: string, fetch?: typeof fetch, timeoutMs?: number, apiKey?: string }} [options]
    */
-  constructor({ baseUrl = "http://127.0.0.1:9100", fetch: fetchImpl, timeoutMs = 60000 } = {}) {
+  constructor({ baseUrl = "http://127.0.0.1:9100", fetch: fetchImpl, timeoutMs = 60000, apiKey } = {}) {
+    this.apiKey = apiKey;
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this._fetch = fetchImpl || globalThis.fetch;
     this.timeoutMs = timeoutMs;
@@ -29,7 +30,10 @@ export class CCEClient {
     try {
       const res = await this._fetch(this.baseUrl + path, {
         method,
-        headers: body === undefined ? {} : { "Content-Type": "application/json" },
+        headers: {
+          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+          ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+        },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: controller.signal,
       });

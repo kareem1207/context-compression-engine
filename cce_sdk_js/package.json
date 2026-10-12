@@ -15,5 +15,7 @@
   },
   "engines": { "node": ">=18" },
   "keywords": ["llm", "memory", "context", "compression", "mcp", "rag"],
+  "license": "MIT",
+  "author": "Shaik Kareem",
   "repository": { "type": "git", "url": "git+https://github.com/kareem1207/context-compression-engine.git" }
 }

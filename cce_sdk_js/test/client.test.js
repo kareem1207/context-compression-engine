@@ -43,3 +43,12 @@ test("listSessions unwraps the array", async () => {
   const c = new CCEClient({ fetch: mockFetch(() => ({ body: { sessions: [{ session_id: "a" }] } })) });
   assert.deepEqual(await c.listSessions(), [{ session_id: "a" }]);
 });
+
+test("apiKey is sent as a Bearer token", async () => {
+  const f = mockFetch(() => ({ body: { status: "ok" } }));
+  await new CCEClient({ fetch: f, apiKey: "k1" }).health();
+  assert.equal(f.calls[0].init.headers.Authorization, "Bearer k1");
+  const g = mockFetch(() => ({ body: { status: "ok" } }));
+  await new CCEClient({ fetch: g }).health();
+  assert.equal(g.calls[0].init.headers.Authorization, undefined);
+});

@@ -1,0 +1,486 @@
+{
+  "model": "deepseek-coder-6.7b",
+  "date": "2026-10-12",
+  "machine": "AMD64 Family 25 Model 80 Stepping 0, AuthenticAMD, Windows",
+  "dataset": {
+    "seed": 7,
+    "turns": 120,
+    "approx_tokens": 3798,
+    "questions": 12
+  },
+  "cce_config": {
+    "hot_tier_max_turns": 4,
+    "retrieval_top_k": 3,
+    "meso_max_tokens": 200,
+    "summarizer": "extractive",
+    "embedder": "sentence-transformers/all-MiniLM-L6-v2"
+  },
+  "summary": {
+    "full": {
+      "accuracy": 0.583,
+      "correct": 7,
+      "mean_prompt_tokens": 3980,
+      "mean_prompt_eval_seconds": 22.35
+    },
+    "recent": {
+      "accuracy": 0.0,
+      "correct": 0,
+      "mean_prompt_tokens": 524,
+      "mean_prompt_eval_seconds": 14.34
+    },
+    "cce": {
+      "accuracy": 0.667,
+      "correct": 8,
+      "mean_prompt_tokens": 534,
+      "mean_prompt_eval_seconds": 20.01
+    }
+  },
+  "by_question_type": {
+    "lexical": {
+      "full": 0.833,
+      "recent": 0.0,
+      "cce": 1.0
+    },
+    "paraphrase": {
+      "full": 0.333,
+      "recent": 0.0,
+      "cce": 0.333
+    }
+  },
+  "rows": [
+    {
+      "question": "How many days until the staging database password rotates?",
+      "kind": "lexical",
+      "keys": [
+        "45"
+      ],
+      "turns_from_end": 112,
+      "cce_build_seconds": 8.17,
+      "full": {
+        "answer": "The password rotation period is 45 days.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3981,
+        "cached_tokens": 0,
+        "prompt_ms": 176557.174,
+        "seconds": 182.57,
+        "correct": true
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI, I don't have access to any specific information about staging database password rotation times. This information is typically managed by the system administrators or developers based on their specific policies and procedures.",
+        "finish_reason": "stop",
+        "prompt_tokens": 390,
+        "cached_tokens": 63,
+        "prompt_ms": 11859.767,
+        "seconds": 21.36,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The staging database password rotates every 45 days.",
+        "finish_reason": "stop",
+        "prompt_tokens": 430,
+        "cached_tokens": 0,
+        "prompt_ms": 17678.432,
+        "seconds": 20.66,
+        "correct": true
+      }
+    },
+    {
+      "question": "In which city will my sibling be getting married?",
+      "kind": "paraphrase",
+      "keys": [
+        "pune"
+      ],
+      "turns_from_end": 108,
+      "cce_build_seconds": 2.33,
+      "full": {
+        "answer": "The city will be Pune.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3980,
+        "cached_tokens": 3933,
+        "prompt_ms": 8835.91,
+        "seconds": 13.76,
+        "correct": true
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI programming assistant, I don't have access to personal data about individuals unless it has been shared with me in the course of our conversation. I am designed to respect user privacy and confidentiality. Therefore, I can't provide the information you're asking for.",
+        "finish_reason": "stop",
+        "prompt_tokens": 389,
+        "cached_tokens": 342,
+        "prompt_ms": 2532.567,
+        "seconds": 14.4,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Your sibling's wedding will be in Pune.",
+        "finish_reason": "stop",
+        "prompt_tokens": 440,
+        "cached_tokens": 0,
+        "prompt_ms": 16620.097,
+        "seconds": 19.27,
+        "correct": true
+      }
+    },
+    {
+      "question": "What is the internal codename for the new app?",
+      "kind": "lexical",
+      "keys": [
+        "bluefin"
+      ],
+      "turns_from_end": 104,
+      "cce_build_seconds": 2.33,
+      "full": {
+        "answer": "The internal codename for the new app is 'Bluefin'.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3980,
+        "cached_tokens": 3933,
+        "prompt_ms": 8404.469,
+        "seconds": 14.31,
+        "correct": true
+      },
+      "recent": {
+        "answer": "The internal codename for the new app is \"Deepseek Coder\".",
+        "finish_reason": "stop",
+        "prompt_tokens": 472,
+        "cached_tokens": 63,
+        "prompt_ms": 16550.965,
+        "seconds": 21.35,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The internal codename for the new app is 'Bluefin'.",
+        "finish_reason": "stop",
+        "prompt_tokens": 471,
+        "cached_tokens": 0,
+        "prompt_ms": 17911.669,
+        "seconds": 20.47,
+        "correct": true
+      }
+    },
+    {
+      "question": "Is there an ingredient I must avoid because of an allergy?",
+      "kind": "paraphrase",
+      "keys": [
+        "cashew"
+      ],
+      "turns_from_end": 100,
+      "cce_build_seconds": 2.3,
+      "full": {
+        "answer": "Not mentioned.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3982,
+        "cached_tokens": 3933,
+        "prompt_ms": 7156.694,
+        "seconds": 9.33,
+        "correct": false
+      },
+      "recent": {
+        "answer": "Not mentioned.",
+        "finish_reason": "stop",
+        "prompt_tokens": 526,
+        "cached_tokens": 63,
+        "prompt_ms": 17994.509,
+        "seconds": 19.51,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Not mentioned.",
+        "finish_reason": "stop",
+        "prompt_tokens": 559,
+        "cached_tokens": 0,
+        "prompt_ms": 24617.171,
+        "seconds": 26.2,
+        "correct": false
+      }
+    },
+    {
+      "question": "When is our production deploy window?",
+      "kind": "lexical",
+      "keys": [
+        "tuesday",
+        "3"
+      ],
+      "turns_from_end": 94,
+      "cce_build_seconds": 2.32,
+      "full": {
+        "answer": "The production deploy window is Tuesday at 3 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3976,
+        "cached_tokens": 3933,
+        "prompt_ms": 10814.264,
+        "seconds": 22.45,
+        "correct": true
+      },
+      "recent": {
+        "answer": "Production deploy window is scheduled for 3 PM on Monday.",
+        "finish_reason": "stop",
+        "prompt_tokens": 385,
+        "cached_tokens": 342,
+        "prompt_ms": 2229.315,
+        "seconds": 7.1,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The production deploy window is Tuesday at 3 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 429,
+        "cached_tokens": 0,
+        "prompt_ms": 15831.863,
+        "seconds": 17.94,
+        "correct": true
+      }
+    },
+    {
+      "question": "Which city do we ship stock from?",
+      "kind": "paraphrase",
+      "keys": [
+        "hyderabad"
+      ],
+      "turns_from_end": 78,
+      "cce_build_seconds": 2.27,
+      "full": {
+        "answer": "We ship stock from the city mentioned earlier.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3977,
+        "cached_tokens": 3933,
+        "prompt_ms": 7008.245,
+        "seconds": 12.57,
+        "correct": false
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI programming assistant, I don't have access to information about specific cities or shipment locations. My main function is to provide assistance with computer science-related questions.",
+        "finish_reason": "stop",
+        "prompt_tokens": 521,
+        "cached_tokens": 477,
+        "prompt_ms": 2469.631,
+        "seconds": 12.45,
+        "correct": false
+      },
+      "cce": {
+        "answer": "We ship stock from all over the world.",
+        "finish_reason": "stop",
+        "prompt_tokens": 512,
+        "cached_tokens": 0,
+        "prompt_ms": 19350.277,
+        "seconds": 21.36,
+        "correct": false
+      }
+    },
+    {
+      "question": "What is my goal time for the half marathon?",
+      "kind": "lexical",
+      "keys": [
+        "1",
+        "52"
+      ],
+      "turns_from_end": 70,
+      "cce_build_seconds": 2.52,
+      "full": {
+        "answer": "Your goal time for the half marathon is 1:30 hours.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3980,
+        "cached_tokens": 3933,
+        "prompt_ms": 7035.061,
+        "seconds": 13.71,
+        "correct": false
+      },
+      "recent": {
+        "answer": "Your goal time for the half marathon is 1:30 hours.",
+        "finish_reason": "stop",
+        "prompt_tokens": 758,
+        "cached_tokens": 63,
+        "prompt_ms": 28103.632,
+        "seconds": 32.95,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Your marathon goal time is 1 hour 52 minutes for the half distance.",
+        "finish_reason": "stop",
+        "prompt_tokens": 740,
+        "cached_tokens": 0,
+        "prompt_ms": 30302.363,
+        "seconds": 35.43,
+        "correct": true
+      }
+    },
+    {
+      "question": "How much do we lose to processing costs on each sale?",
+      "kind": "paraphrase",
+      "keys": [
+        "2.1"
+      ],
+      "turns_from_end": 54,
+      "cce_build_seconds": 2.31,
+      "full": {
+        "answer": "The processing cost is typically around 2-3%.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3981,
+        "cached_tokens": 3933,
+        "prompt_ms": 8618.979,
+        "seconds": 19.1,
+        "correct": false
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI programming assistant, I don't have access to previous conversations or any specific context about processing costs on each sale. I'm here to provide assistance related to computer science and programming.",
+        "finish_reason": "stop",
+        "prompt_tokens": 594,
+        "cached_tokens": 0,
+        "prompt_ms": 23136.86,
+        "seconds": 32.49,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The processing cost on each sale depends on the specific business model and the technology used. It could be a percentage of the gross sales, a flat fee, or a combination of both.",
+        "finish_reason": "stop",
+        "prompt_tokens": 586,
+        "cached_tokens": 0,
+        "prompt_ms": 23968.112,
+        "seconds": 31.71,
+        "correct": false
+      }
+    },
+    {
+      "question": "Under what name is the Kyoto hotel booked?",
+      "kind": "lexical",
+      "keys": [
+        "rao"
+      ],
+      "turns_from_end": 48,
+      "cce_build_seconds": 2.3,
+      "full": {
+        "answer": "The Kyoto hotel was booked under the name Rao.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3980,
+        "cached_tokens": 3933,
+        "prompt_ms": 8864.665,
+        "seconds": 19.73,
+        "correct": true
+      },
+      "recent": {
+        "answer": "The Kyoto hotel was booked under the name \"The Grand Hotel\".",
+        "finish_reason": "stop",
+        "prompt_tokens": 509,
+        "cached_tokens": 59,
+        "prompt_ms": 17504.513,
+        "seconds": 21.26,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The Kyoto hotel was booked under the name \"Rao\".",
+        "finish_reason": "stop",
+        "prompt_tokens": 507,
+        "cached_tokens": 0,
+        "prompt_ms": 19214.248,
+        "seconds": 21.98,
+        "correct": true
+      }
+    },
+    {
+      "question": "Which person should be paged first if production breaks?",
+      "kind": "paraphrase",
+      "keys": [
+        "meera"
+      ],
+      "turns_from_end": 38,
+      "cce_build_seconds": 2.3,
+      "full": {
+        "answer": "The on-call engineer.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3980,
+        "cached_tokens": 3933,
+        "prompt_ms": 7152.014,
+        "seconds": 11.25,
+        "correct": false
+      },
+      "recent": {
+        "answer": "The person who set up the production system should be paged first.",
+        "finish_reason": "stop",
+        "prompt_tokens": 472,
+        "cached_tokens": 425,
+        "prompt_ms": 2282.677,
+        "seconds": 7.8,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The person who should be paged first is the on-call engineer.",
+        "finish_reason": "stop",
+        "prompt_tokens": 485,
+        "cached_tokens": 123,
+        "prompt_ms": 15149.734,
+        "seconds": 20.16,
+        "correct": false
+      }
+    },
+    {
+      "question": "On which day do I do my long run?",
+      "kind": "lexical",
+      "keys": [
+        "saturday"
+      ],
+      "turns_from_end": 28,
+      "cce_build_seconds": 2.29,
+      "full": {
+        "answer": "The long run is usually on Saturdays at 6 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3979,
+        "cached_tokens": 3933,
+        "prompt_ms": 8628.134,
+        "seconds": 19.71,
+        "correct": true
+      },
+      "recent": {
+        "answer": "The long run should be on the last day of the week.",
+        "finish_reason": "stop",
+        "prompt_tokens": 742,
+        "cached_tokens": 0,
+        "prompt_ms": 44888.359,
+        "seconds": 51.21,
+        "correct": false
+      },
+      "cce": {
+        "answer": "I usually do my long run on Saturdays at 6 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 739,
+        "cached_tokens": 283,
+        "prompt_ms": 18793.581,
+        "seconds": 25.54,
+        "correct": true
+      }
+    },
+    {
+      "question": "What is the most we are allowed to spend on hosting each month?",
+      "kind": "paraphrase",
+      "keys": [
+        "800"
+      ],
+      "turns_from_end": 24,
+      "cce_build_seconds": 2.37,
+      "full": {
+        "answer": "The most we are allowed to spend on hosting each month is $800.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3983,
+        "cached_tokens": 3933,
+        "prompt_ms": 9103.504,
+        "seconds": 22.13,
+        "correct": true
+      },
+      "recent": {
+        "answer": "As an AI, I don't have access to previous conversations or any context about hosting costs. Therefore, I can't provide a specific answer based on the information provided earlier. I suggest you reach out to your hosting provider or accountant for the most accurate information.",
+        "finish_reason": "stop",
+        "prompt_tokens": 527,
+        "cached_tokens": 477,
+        "prompt_ms": 2576.141,
+        "seconds": 18.55,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The most we are allowed to spend on hosting each month is $800.",
+        "finish_reason": "stop",
+        "prompt_tokens": 511,
+        "cached_tokens": 0,
+        "prompt_ms": 20693.101,
+        "seconds": 24.47,
+        "correct": true
+      }
+    }
+  ]
+}

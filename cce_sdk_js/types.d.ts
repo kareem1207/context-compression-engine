@@ -16,6 +16,7 @@ export interface ClientOptions {
   baseUrl?: string;
   fetch?: typeof fetch;
   timeoutMs?: number;
+  apiKey?: string;
 }
 
 export interface ContextOptions {
