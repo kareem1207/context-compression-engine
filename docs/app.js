@@ -1,66 +1,52 @@
-import { createEngine, countTokens, segment } from "./lite.js";
+import { createEngine, segment } from "./lite.js";
 import { SAMPLE_CONVERSATION, SAMPLE_QUERIES } from "./sample.js";
 
 const $ = (id) => document.getElementById(id);
-const COLORS = ["var(--c0)", "var(--c1)", "var(--c2)", "var(--c3)", "var(--c4)", "var(--c5)", "var(--c6)", "var(--c7)"];
-
-const toText = (messages) => messages.map((m) => `${m.role}: ${m.content}`).join("\n");
 
 function el(tag, props = {}, ...kids) {
   const e = document.createElement(tag);
-  Object.entries(props).forEach(([k, v]) => {
+  for (const [k, v] of Object.entries(props)) {
     if (k === "class") e.className = v;
-    else if (k === "style") e.style.cssText = v;
     else e.setAttribute(k, v);
-  });
+  }
   kids.flat().forEach((k) => e.append(k instanceof Node ? k : document.createTextNode(String(k))));
   return e;
 }
 
+const toText = (messages) => messages.map((m) => `${m.role}: ${m.content}`).join("\n");
+
+function bubbles(turns) {
+  return turns.map((t) =>
+    el("li", { class: `bubble ${t.role === "user" ? "me" : "ai"}` }, el("span", { class: "who" }, t.role === "user" ? "You" : "AI"), t.content)
+  );
+}
+
 function engine() {
-  return createEngine({
-    mesoMaxTokens: +$("meso").value,
-    hotTierMaxTurns: +$("hot").value,
-    retrievalTopK: +$("top").value,
-  });
+  return createEngine({ mesoMaxTokens: +$("meso").value, hotTierMaxTurns: +$("hot").value, retrievalTopK: +$("top").value });
 }
 
 let lastQuery = "";
 
-function renderMemory() {
-  const eng = engine();
-  const text = $("convo").value;
-  const { turns, nodes, stats } = eng.compress(text);
+function showChat() {
+  const turns = segment($("convo").value);
+  const tokens = turns.reduce((a, t) => a + t.tokens, 0);
+  $("chat").replaceChildren(...bubbles(turns));
+  $("chatSummary").textContent = turns.length
+    ? `${turns.length} messages, about ${tokens} tokens. Sending all of this to the AI on every question is slow and costs money.`
+    : "Paste or write a conversation to begin.";
+}
 
-  $("stats").replaceChildren(
-    ...[
-      [stats.totalTurns, "messages"],
-      [stats.rawTokens, "tokens in the full history"],
-      [stats.totalChunks, "topics found"],
-      [stats.compressedTokens, "tokens in topic memory"],
-      [stats.compressionRatio + "x", "memory compression"],
-    ].map(([b, s]) => el("div", { class: "stat" }, el("b", {}, b), el("span", {}, s)))
-  );
-
-  $("timeline").replaceChildren(
-    ...nodes.map((n, i) =>
-      el("i", { style: `flex:${n.turns.length};background:${COLORS[i % COLORS.length]}`, title: `${n.topicLabel} (messages ${n.turnStart + 1}-${n.turnEnd + 1})` })
-    )
-  );
-
-  $("chunks").replaceChildren(
-    ...nodes.map((n, i) =>
-      el(
-        "div",
-        { class: "chunk", style: `border-left-color:${COLORS[i % COLORS.length]}` },
-        el("h4", {}, n.topicLabel, el("span", { class: "meta" }, `messages ${n.turnStart + 1} to ${n.turnEnd + 1} · ${n.tokensRaw} → ${n.tokensCompressed} tokens`)),
-        el("p", {}, n.mesoSummary)
-      )
-    )
-  );
-
-  if (lastQuery) renderAnswer(lastQuery);
-  return { turns, nodes };
+/** A past-context block like "[Topic: x] (turns 0-5)\nsummary\nMost relevant (turn 3): ...\n---" */
+function blockCard(text, index) {
+  const lines = text.split("\n").filter((l) => l && l !== "---");
+  const head = (lines.shift() || "").match(/^\[Topic: (.*)\] \(turns (\d+)-(\d+)\)$/);
+  const title = head ? `Part ${index + 1} of the chat: messages ${+head[2] + 1} to ${+head[3] + 1}` : `Part ${index + 1} of the chat`;
+  const body = [];
+  for (const l of lines) {
+    const m = l.match(/^(?:Most relevant|Relevant)(?: \(turn \d+\))?: (.*)$/);
+    body.push(m ? el("p", { class: "match" }, el("b", {}, "Best match: "), m[1]) : el("p", {}, l));
+  }
+  return el("div", { class: "pick" }, el("h4", {}, title), body, head ? el("p", { class: "label" }, `topic: ${head[1]}`) : "");
 }
 
 function renderAnswer(query) {
@@ -68,65 +54,58 @@ function renderAnswer(query) {
   if (!q) return;
   lastQuery = q;
   const out = engine().process($("convo").value, q);
-  const { stats } = out;
+  const { stats, payload } = out;
   $("result").hidden = false;
 
-  const bar = (label, tokens, max, good) =>
-    el("div", { class: "bar" + (good ? " good" : "") },
-      el("span", {}, label),
-      el("div", { class: "track" }, el("div", { class: "fill", style: `width:${max ? Math.max(2, (tokens / max) * 100) : 0}%` })),
-      el("span", {}, `${tokens} tokens`));
-
-  $("compare").replaceChildren(
-    bar("Send everything", stats.rawTokens, stats.rawTokens, false),
-    bar("Send CCE context", stats.contextTokens, stats.rawTokens, true),
-    el("div", { class: "saved" }, stats.rawTokens ? `${Math.max(0, stats.savedPercent)}% fewer tokens (${stats.tokensSaved} saved)` : "Add a conversation first")
+  const pct = Math.max(0, stats.savedPercent);
+  $("verdict").replaceChildren(
+    stats.rawTokens
+      ? el("p", { class: "big" }, `${pct}% less for the AI to read`)
+      : el("p", { class: "big" }, "Add a conversation first"),
+    el("p", { class: "fine" }, `Without CCE: ${stats.rawTokens} tokens. With CCE: ${stats.contextTokens} tokens.`)
   );
 
-  $("ranked").replaceChildren(
-    ...(out.results.length
-      ? out.results.map((r, i) =>
-          el("div", { class: "rank" },
-            el("strong", {}, `${i + 1}. ${r.node.topicLabel}`), ` (messages ${r.node.turnStart + 1} to ${r.node.turnEnd + 1})`,
-            el("div", { class: "score" },
-              el("span", {}, `similarity ${r.semantic.toFixed(2)}`),
-              el("span", {}, `recency +${r.recency.toFixed(2)}`),
-              el("span", {}, `keywords +${r.keyword.toFixed(2)}`),
-              el("span", {}, `score ${r.score.toFixed(2)}`))))
-      : [el("p", { class: "fine" }, "No topics yet.")])
-  );
+  const bar = (label, tokens, good) =>
+    el("div", { class: "bar" + (good ? " good" : "") }, el("span", {}, label),
+      el("div", { class: "track" }, el("div", { class: "fill", style: `width:${stats.rawTokens ? Math.max(3, (tokens / stats.rawTokens) * 100) : 0}%` })),
+      el("span", {}, `${tokens}`));
+  $("compare").replaceChildren(bar("Whole chat", stats.rawTokens, false), bar("With CCE", stats.contextTokens, true));
 
-  const msgs = out.payload.toMessages();
-  $("payload").textContent = msgs.map((m) => `[${m.role}]\n${m.content}`).join("\n\n");
+  $("picked").replaceChildren(...(payload.pastBlocks.length ? payload.pastBlocks.map(blockCard) : [el("p", { class: "fine" }, "Nothing older was needed.")]));
+  $("recent").replaceChildren(...bubbles(payload.recentTurns));
+
+  $("scores").replaceChildren(
+    ...out.results.map((r) =>
+      el("p", { class: "fine" }, `${r.node.topicLabel} (messages ${r.node.turnStart + 1}-${r.node.turnEnd + 1}): similarity ${r.semantic.toFixed(2)}, recency +${r.recency.toFixed(2)}, keywords +${r.keyword.toFixed(2)}`)
+    )
+  );
+  $("payload").textContent = payload.toMessages().map((m) => `[${m.role}]\n${m.content}`).join("\n\n");
 }
 
-function loadSample() {
+function setSample() {
   $("convo").value = toText(SAMPLE_CONVERSATION);
-  lastQuery = "";
-  $("result").hidden = true;
-  renderMemory();
+  showChat();
 }
 
-function bindSliders() {
-  [["meso", "oMeso"], ["hot", "oHot"], ["top", "oTop"]].forEach(([i, o]) => {
-    $(i).addEventListener("input", () => {
-      $(o).textContent = $(i).value;
-      renderMemory();
-    });
+["meso", "hot", "top"].forEach((id) => {
+  const out = { meso: "oMeso", hot: "oHot", top: "oTop" }[id];
+  $(id).addEventListener("input", () => {
+    $(out).textContent = $(id).value;
+    if (lastQuery) renderAnswer(lastQuery);
   });
-}
+});
 
 let timer;
 $("convo").addEventListener("input", () => {
   clearTimeout(timer);
-  timer = setTimeout(renderMemory, 250);
+  timer = setTimeout(() => {
+    showChat();
+    if (lastQuery) renderAnswer(lastQuery);
+  }, 250);
 });
-$("useSample").addEventListener("click", loadSample);
-$("clear").addEventListener("click", () => {
-  $("convo").value = "";
-  lastQuery = "";
-  $("result").hidden = true;
-  renderMemory();
+$("useSample").addEventListener("click", () => {
+  setSample();
+  if (lastQuery) renderAnswer(lastQuery);
 });
 $("askForm").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -139,12 +118,12 @@ $("chips").replaceChildren(
     b.addEventListener("click", () => {
       $("query").value = q;
       renderAnswer(q);
+      $("result").scrollIntoView({ behavior: "smooth", block: "start" });
     });
     return b;
   })
 );
 
-bindSliders();
-loadSample();
-renderAnswer(SAMPLE_QUERIES[0]);
+setSample();
 $("query").value = SAMPLE_QUERIES[0];
+renderAnswer(SAMPLE_QUERIES[0]);

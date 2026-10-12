@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Context Compression Engine: live demo</title>
-    <meta name="description" content="Paste a long AI conversation and watch it compress into topic memory. Ask a question and see the small context a model would receive. Runs entirely in your browser.">
+    <meta name="description" content="See how a long AI chat shrinks to the few parts a model actually needs. Runs in your browser, nothing is uploaded.">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -12,66 +12,64 @@
         <div class="wrap">
             <div>
                 <h1>Context Compression Engine</h1>
-                <p class="tag">Give an AI the right memory, not the whole chat.</p>
+                <p class="tag">Long chats make AI slow and expensive. This sends the model only what it needs.</p>
             </div>
-            <nav>
-                <a class="btn ghost" href="https://github.com/kareem1207/context-compression-engine" target="_blank" rel="noopener">GitHub</a>
-            </nav>
+            <a class="btn ghost" href="https://github.com/kareem1207/context-compression-engine" target="_blank" rel="noopener">GitHub</a>
         </div>
     </header>
 
     <main class="wrap">
-        <section class="intro card">
-            <p>Long conversations get expensive and slow because the model rereads everything. CCE splits a chat into <strong>topics</strong>, summarises each one, and for every new question sends only the <strong>relevant topics plus the last few messages</strong>.</p>
-            <p class="fine">This page is <strong>CCE Lite</strong>: the same pipeline written in plain JavaScript, running in your browser. Nothing you paste is uploaded. The Python engine uses a neural sentence model for topic detection; Lite uses a lightweight word-hashing embedder, so it is best on keyword-rich text.</p>
-        </section>
-
         <section class="card" aria-labelledby="s1">
-            <div class="head">
-                <h2 id="s1"><span class="step">1</span> The conversation</h2>
-                <div class="row">
-                    <button id="useSample" class="btn small">Use sample</button>
-                    <button id="clear" class="btn small ghost">Clear</button>
-                </div>
-            </div>
-            <p class="fine">One message per line, starting with <code>user:</code> or <code>assistant:</code>. Or just paste text, lines then alternate between the two.</p>
-            <textarea id="convo" spellcheck="false" aria-label="Conversation"></textarea>
-            <div class="settings">
-                <label>Summary size per topic <output id="oMeso">80</output> tokens
-                    <input id="meso" type="range" min="30" max="200" step="10" value="80"></label>
-                <label>Recent messages kept word for word <output id="oHot">4</output>
-                    <input id="hot" type="range" min="0" max="10" step="1" value="4"></label>
-                <label>Topics sent per question <output id="oTop">2</output>
-                    <input id="top" type="range" min="1" max="5" step="1" value="2"></label>
-            </div>
+            <h2 id="s1"><span class="step">1</span> A long conversation</h2>
+            <p class="lead" id="chatSummary"></p>
+            <ol class="chat" id="chat" aria-label="The conversation"></ol>
+            <details class="more">
+                <summary>Use your own conversation</summary>
+                <p class="fine">Paste a chat, one message per line, starting with <code>user:</code> or <code>assistant:</code>. Nothing leaves your browser.</p>
+                <textarea id="convo" spellcheck="false" aria-label="Conversation text"></textarea>
+                <div class="row"><button id="useSample" class="btn small ghost" type="button">Back to the sample</button></div>
+            </details>
         </section>
 
         <section class="card" aria-labelledby="s2">
-            <h2 id="s2"><span class="step">2</span> What CCE remembers</h2>
-            <div class="stats" id="stats"></div>
-            <div class="timeline" id="timeline" aria-label="Conversation split into topics"></div>
-            <div class="chunks" id="chunks"></div>
+            <h2 id="s2"><span class="step">2</span> Ask a question about it</h2>
+            <p class="lead">Pick one, or type your own.</p>
+            <div class="chips" id="chips"></div>
+            <form id="askForm" class="ask">
+                <input id="query" aria-label="Your question" placeholder="Type a question about the chat" autocomplete="off">
+                <button class="btn" type="submit">Ask</button>
+            </form>
         </section>
 
-        <section class="card" aria-labelledby="s3">
-            <h2 id="s3"><span class="step">3</span> Ask a question</h2>
-            <form id="askForm" class="ask">
-                <input id="query" aria-label="Question" placeholder="e.g. How do I verify webhook signatures?" autocomplete="off">
-                <button class="btn" type="submit">Build context</button>
-            </form>
-            <div class="chips" id="chips"></div>
-            <div id="result" hidden>
-                <div class="compare" id="compare"></div>
-                <h3>Topics it picked</h3>
-                <div id="ranked"></div>
-                <h3>What the model would receive</h3>
+        <section class="card result" id="result" hidden aria-labelledby="s3" aria-live="polite">
+            <h2 id="s3"><span class="step">3</span> What the AI receives</h2>
+            <div class="verdict" id="verdict"></div>
+            <div class="compare" id="compare"></div>
+
+            <h3>The parts of the chat it picked</h3>
+            <div id="picked"></div>
+
+            <h3>And the latest messages, word for word</h3>
+            <ol class="chat small" id="recent"></ol>
+
+            <details class="more">
+                <summary>Technical details</summary>
+                <div class="settings">
+                    <label>Summary length per topic <output id="oMeso">80</output> tokens<input id="meso" type="range" min="30" max="200" step="10" value="80"></label>
+                    <label>Latest messages kept <output id="oHot">4</output><input id="hot" type="range" min="0" max="10" step="1" value="4"></label>
+                    <label>Topics sent <output id="oTop">2</output><input id="top" type="range" min="1" max="5" step="1" value="2"></label>
+                </div>
+                <div id="scores"></div>
+                <h4>The exact text sent to the model</h4>
                 <pre id="payload" tabindex="0"></pre>
-            </div>
+            </details>
         </section>
+
+        <p class="fine note">This page runs <strong>CCE Lite</strong>, a small version of the engine written in JavaScript that matches on shared words. The Python version understands paraphrases too. In our tests CCE finds facts said long ago as reliably as ordinary search while sending far fewer tokens than the whole chat; see the <a href="https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md" target="_blank" rel="noopener">benchmarks and their limits</a>.</p>
     </main>
 
     <footer class="wrap foot">
-        <p>An open project by <a href="https://github.com/kareem1207" target="_blank" rel="noopener">Shaik Kareem</a>. Use it in Python, over MCP, over REST, or in JavaScript (<code>cce_sdk_js</code>).</p>
+        <p>An open project by <a href="https://github.com/kareem1207" target="_blank" rel="noopener">Shaik Kareem</a>. Install: <code>pip install context-compression-engine</code> or <code>npm install cce-client</code>.</p>
     </footer>
 
     <script type="module" src="app.js"></script>
