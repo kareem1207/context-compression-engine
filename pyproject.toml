@@ -18,18 +18,18 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-# The engine itself: embeddings for topic detection and retrieval.
+# The engine itself. Light: the neural embedder is an optional extra.
 dependencies = [
     "numpy>=1.26",
-    "sentence-transformers>=3.0",
     "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
+neural = ["sentence-transformers>=3.0"]
 rest = ["fastapi>=0.110", "uvicorn>=0.29", "pydantic>=2.6"]
 mcp = ["mcp>=1.2", "pydantic>=2.6"]
 ui = ["fastapi>=0.110", "uvicorn>=0.29", "pyvis>=0.3"]
-all = ["context-compression-engine[rest,mcp,ui]"]
+all = ["context-compression-engine[neural,rest,mcp,ui]"]
 
 [project.scripts]
 cce-rest = "cce_rest.app:main"
@@ -44,12 +44,14 @@ Issues = "https://github.com/kareem1207/context-compression-engine/issues"
 # `uv sync` installs this group, so a fresh clone can run every test and demo.
 dev = [
     "pytest>=8.0",
+    "sentence-transformers>=3.0",
     "fastapi>=0.110",
     "uvicorn>=0.29",
     "pydantic>=2.6",
     "mcp>=1.2",
     "pyvis>=0.3",
 ]
+bench = ["pyarrow>=15"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["cce_core", "cce_mcp", "cce_rest"]

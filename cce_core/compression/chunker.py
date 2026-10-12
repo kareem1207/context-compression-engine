@@ -21,9 +21,9 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
+from cce_core.embedding import load_embedder
 from cce_core.ingestion.segmenter import Turn
 
 if TYPE_CHECKING:
@@ -44,6 +44,7 @@ class Chunk:
     # filled by summarizer later
     micro_summaries: list[str] = field(default_factory=list)
     meso_summary: str = ""
+    turn_embeddings: "np.ndarray | None" = None   # one vector per turn, for turn-level retrieval
 
     @property
     def start_index(self) -> int:
@@ -93,13 +94,21 @@ class SemanticChunker:
 
     def __init__(self, config: CCEConfig = DEFAULT_CONFIG):
         self.config = config
-        self._model: SentenceTransformer | None = None  # lazy load
+        self._model = None  # lazy load
 
     @property
-    def model(self) -> SentenceTransformer:
+    def model(self):
+        """The embedder (neural or hashing, see cce_core.embedding)."""
         if self._model is None:
-            self._model = SentenceTransformer(self.config.embedding_model)
+            self._model = load_embedder(self.config)
         return self._model
+
+    @property
+    def threshold(self) -> float:
+        """Topic-boundary similarity threshold appropriate for the active embedder."""
+        if getattr(self.model, "name", "neural") == "hash":
+            return self.config.hash_chunk_similarity_threshold
+        return self.config.chunk_similarity_threshold
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -162,7 +171,7 @@ class SemanticChunker:
 
         boundaries: set[int] = set()
         w = self.config.chunk_window_size
-        threshold = self.config.chunk_similarity_threshold
+        threshold = self.threshold
 
         # Compute smoothed similarity: average embedding of window vs next window
         similarities: list[float] = []
@@ -248,6 +257,7 @@ class SemanticChunker:
             embedding=centroid,
             created_at=datetime.now(timezone.utc),
             session_id=session_id,
+            turn_embeddings=embeddings,
         )
 
 

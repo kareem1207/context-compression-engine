@@ -118,8 +118,9 @@ class StatelessProcessor:
                 recency_score=0.0,
                 keyword_score=0.0,
                 composite_score=float(score),
+                best_turn=best_text,
             )
-            for node, score in top_results
+            for node, score, best_text in top_results
         ]
 
         if not retrieval_results:
@@ -167,17 +168,19 @@ class StatelessProcessor:
         self,
         query_emb,
         nodes: list[MemoryNode],
-    ) -> list[tuple[MemoryNode, float]]:
+    ) -> list[tuple[MemoryNode, float, str]]:
         """
-        Pure in-memory cosine similarity scoring.
-        Returns sorted (node, score) pairs, best first.
+        Pure in-memory scoring (best-matching message per node).
+        Returns sorted (node, score, best message text) triples, best first.
         """
         import numpy as np
 
         if not nodes:
             return []
 
-        matrix = np.stack([n.embedding for n in nodes], axis=0)
-        scores = matrix @ query_emb.astype("float32")
-        order = scores.argsort()[::-1]
-        return [(nodes[int(i)], float(scores[i])) for i in order]
+        from cce_core.retrieval.retriever import node_similarity
+
+        qvec = query_emb.astype("float32")
+        scored = [(n, *node_similarity(n, qvec)) for n in nodes]
+        scored.sort(key=lambda x: -x[1])
+        return scored

@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
-from cce_core.compression.merger import MemoryNode
+from cce_core.compression.merger import MemoryNode, decode_turn_vecs
 
 if TYPE_CHECKING:
     from cce_core.memory.store import MemoryStore
@@ -48,6 +48,7 @@ class RetrievalResult:
     recency_score: float       # normalized recency contribution
     keyword_score: float       # keyword overlap bonus
     composite_score: float     # final ranking score
+    best_turn: str = ""        # text of the best-matching message in the node (for quoting)
 
     @property
     def compressed_text(self) -> str:
@@ -71,6 +72,28 @@ class RetrievalResult:
             f"score={self.composite_score:.3f}, "
             f"turns={self.node.turn_start}-{self.node.turn_end})"
         )
+
+
+def node_similarity(node: MemoryNode, qvec: np.ndarray) -> tuple[float, str]:
+    """
+    Similarity of a query to a node, judged by its best-matching message rather than only
+    the topic centroid. A single specific fact inside a long, mixed topic barely moves the
+    centroid, so centroid-only search misses it; the best single message does not.
+
+    Returns (score, text of the best-matching message). Nodes saved before per-turn vectors
+    existed fall back to the centroid.
+    """
+    centroid = float(node.embedding @ qvec)
+    vecs = decode_turn_vecs(node.metadata)
+    if vecs is None or vecs.shape[1] != qvec.shape[0] or len(vecs) == 0:
+        return centroid, ""
+    sims = vecs @ qvec
+    i = int(np.argmax(sims))
+    best = float(sims[i])
+    # If a question matched best, the useful part is the answer that follows it.
+    micros = node.micro_summaries
+    text = micros[i] if i < len(micros) else ""
+    return max(best, centroid), text
 
 
 class Retriever:
@@ -120,20 +143,22 @@ class Retriever:
         query_keywords = self._extract_keywords(query)
 
         # Get raw semantic results from warm tier (already recency-boosted at DB level)
-        raw_results = store.search_warm(
-            query_emb,
-            top_k=top_k * 2,   # fetch 2× so we can re-rank with keyword bonus
-            recency_boost=0.0,  # we apply boost ourselves for full score breakdown
-        )
+        qvec = query_emb.astype(np.float32)
+        nodes = store.warm.get_all(session_id=store.session_id)
+        if nodes and nodes[0].embedding.shape[0] != qvec.shape[0]:
+            raise ValueError(
+                f"Stored embeddings have {nodes[0].embedding.shape[0]} dimensions but the active embedder produces "
+                f"{qvec.shape[0]}. Use the same embedder (CCE_EMBEDDER) that created these sessions."
+            )
+        raw_results = [(n, *node_similarity(n, qvec)) for n in nodes]
 
         if not raw_results:
             return []
 
-        # Compute recency normalization across candidates
-        max_turn_end = max(n.turn_end for n, _ in raw_results) if raw_results else 1
+        max_turn_end = max(n.turn_end for n, _, _ in raw_results)
 
         results: list[RetrievalResult] = []
-        for node, sem_score in raw_results:
+        for node, sem_score, best_text in raw_results:
             recency = (node.turn_end / max(max_turn_end, 1)) * boost
             keyword = self._keyword_score(node, query_keywords) * keyword_bonus_weight
             composite = sem_score + recency + keyword
@@ -144,6 +169,7 @@ class Retriever:
                 recency_score=float(recency),
                 keyword_score=float(keyword),
                 composite_score=float(composite),
+                best_turn=best_text,
             ))
 
         results.sort(key=lambda r: -r.composite_score)
