@@ -62,7 +62,15 @@ def create_app(config: CCEConfig | None = None) -> FastAPI:
 app = create_app()
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Console entry point: `cce-rest`."""
     import uvicorn
 
-    uvicorn.run("cce_rest.app:app", host=os.getenv("CCE_HOST", "127.0.0.1"), port=int(os.getenv("CCE_PORT", "9100")))
+    host = os.getenv("CCE_HOST", "127.0.0.1")
+    if host not in ("127.0.0.1", "localhost", "::1") and not os.getenv("CCE_API_KEY"):
+        raise SystemExit("Refusing to listen on a public address without CCE_API_KEY set.")
+    uvicorn.run("cce_rest.app:app", host=host, port=int(os.getenv("CCE_PORT", "9100")))
+
+
+if __name__ == "__main__":
+    main()

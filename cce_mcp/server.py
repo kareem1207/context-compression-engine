@@ -451,5 +451,10 @@ async def cce_stateless_compress(params: StatelessCompressInput, ctx: Context) -
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+def main() -> None:
+    """Console entry point: `cce-mcp`."""
+    mcp.run()  # stdio transport, the default for local MCP tools
+
+
 if __name__ == "__main__":
-    mcp.run()  # stdio transport — default for local MCP tools
+    main()

@@ -79,3 +79,16 @@ def test_validation(client):
     assert client.post("/v1/compress", json={"messages": CONVERSATION[:2], "query": ""}).status_code == 422
     assert client.post("/v1/compress", json={"messages": CONVERSATION[:2], "query": "x", "top_k": 0}).status_code == 422
     assert client.post("/v1/compress", json={"messages": CONVERSATION[:2], "query": "x", "fmt": "xml"}).status_code == 422
+
+
+def test_api_key_is_enforced_when_configured(tmp_path, monkeypatch):
+    monkeypatch.setenv("CCE_API_KEY", "s3cret-key")
+    cfg = CCEConfig(base_dir=tmp_path, hot_tier_max_turns=4, retrieval_top_k=3)
+    body = {"messages": CONVERSATION[:4], "query": "webhook"}
+    with TestClient(create_app(cfg)) as c:
+        assert c.get("/health").status_code == 200                      # health stays open
+        assert c.post("/v1/compress", json=body).status_code == 401
+        assert c.post("/v1/compress", json=body, headers={"Authorization": "Bearer wrong"}).status_code == 401
+        assert c.post("/v1/compress", json=body, headers={"Authorization": "Bearer s3cret-key"}).status_code == 200
+        assert c.post("/v1/compress", json=body, headers={"X-API-Key": "s3cret-key"}).status_code == 200
+        assert c.get("/v1/sessions").status_code == 401

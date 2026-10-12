@@ -6,7 +6,7 @@ It runs fully offline by default (no LLM is needed to compress) and plugs into a
 
 **[Try the live demo in your browser](https://kareem1207.github.io/context-compression-engine/)**: paste a conversation, see it split into topics, ask a question and compare the context a model would receive with the full history.
 
-> **Status: working prototype (v0.1).** The core engine, memory tiers, retrieval, sessions, MCP server, REST API, JavaScript client and a live dashboard are implemented and tested. Benchmarks of answer quality have not been published yet, so this README makes no claims about that.
+> **Status: working prototype (v0.1).** The core engine, memory tiers, retrieval, sessions, MCP server, REST API, JavaScript client and a live dashboard are implemented and tested. A small first benchmark is in [`benchmarks/`](benchmarks/README.md): on two local models CCE matched full-history accuracy with about 86% fewer tokens. It is a 12-question synthetic test, so treat it as a smoke test, not proof.
 
 ---
 
@@ -44,6 +44,15 @@ git clone https://github.com/kareem1207/context-compression-engine.git
 cd context-compression-engine
 uv sync
 ```
+
+Or install it into your own project straight from GitHub (it is not on PyPI yet):
+
+```bash
+pip install "context-compression-engine[all] @ git+https://github.com/kareem1207/context-compression-engine"
+# extras: [rest] REST API, [mcp] MCP server, [ui] dashboard; the base install is the engine only
+```
+
+This also gives you two commands: `cce-rest` (the REST API) and `cce-mcp` (the MCP server).
 
 The first run downloads the embedding model (`sentence-transformers/all-MiniLM-L6-v2`, roughly 90 MB) from Hugging Face. After that it works offline.
 
@@ -146,6 +155,8 @@ curl -X POST localhost:9100/v1/compress -H "Content-Type: application/json"   -d
 
 Configuration comes from the `CCE_*` variables below; set `CCE_CORS_ORIGINS` (comma separated) to allow browser apps.
 
+**Security.** The API listens on localhost only by default. Set `CCE_API_KEY` to require a key (`Authorization: Bearer <key>` or `X-API-Key`) on every `/v1` route; the server refuses to start on a public address without one. Anyone with access can read every stored session, so do not expose it to the internet without a key and HTTPS in front.
+
 ### Use it from JavaScript
 
 [`cce_sdk_js`](cce_sdk_js) has two parts, no dependencies, Node 18+ and browsers:
@@ -153,7 +164,7 @@ Configuration comes from the `CCE_*` variables below; set `CCE_CORS_ORIGINS` (co
 ```js
 // 1) Talk to the REST API above
 import { CCEClient } from "cce-client";
-const cce = new CCEClient({ baseUrl: "http://localhost:9100" });
+const cce = new CCEClient({ baseUrl: "http://localhost:9100", apiKey: process.env.CCE_API_KEY });
 await cce.addMessages("chat-1", messages);
 const { context } = await cce.getContext("chat-1", "what did we decide about billing?");
 
@@ -163,7 +174,7 @@ const out = createEngine().process(messages, "what did we decide about billing?"
 console.log(out.stats.savedPercent, out.payload.toMessages());
 ```
 
-The package is not published to npm yet; import the files from the repo for now. **CCE Lite** swaps the neural sentence model for a lightweight word-hashing embedder, so it needs no downloads but is less semantic than the Python engine.
+The package is not on npm yet (it will be `cce-client`); import the files from the repo for now. **CCE Lite** swaps the neural sentence model for a lightweight word-hashing embedder, so it needs no downloads but is less semantic than the Python engine.
 
 ### See it work
 
@@ -239,11 +250,16 @@ cd cce_sdk_js && npm test                            # JavaScript: client and of
 ## Roadmap
 
 - [x] REST API (`cce_rest`), JavaScript client and offline engine (`cce_sdk_js`), browser demo
-- [ ] Publish to PyPI and npm
-- [ ] Published benchmarks: answer quality with and without CCE
-- [ ] Add a licence file (none yet, so by default all rights are reserved)
-- [ ] Authentication for the REST API before exposing it beyond localhost
+- [x] First benchmark (12 questions, two local models), see [`benchmarks/`](benchmarks/README.md)
+- [x] MIT licence, packaging metadata, optional API key for the REST API
+- [ ] Bigger benchmark: more conversations, chats longer than the model window, a hosted model, and real (not synthetic) data
+- [ ] Better summaries: the default extractive summariser only picks sentences
+- [ ] Publish to PyPI (`context-compression-engine`) and npm (`cce-client`)
 - [ ] Optional ANN index for large warm tiers
+
+## License
+
+[MIT](LICENSE). Copyright (c) 2026 Shaik Kareem.
 
 ## Author
 

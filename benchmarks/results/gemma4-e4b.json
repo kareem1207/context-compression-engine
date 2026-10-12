@@ -1,0 +1,486 @@
+{
+  "model": "gemma4-e4b",
+  "date": "2026-10-12",
+  "machine": "AMD64 Family 25 Model 80 Stepping 0, AuthenticAMD, Windows",
+  "dataset": {
+    "seed": 7,
+    "turns": 120,
+    "approx_tokens": 3798,
+    "questions": 12
+  },
+  "cce_config": {
+    "hot_tier_max_turns": 4,
+    "retrieval_top_k": 3,
+    "meso_max_tokens": 200,
+    "summarizer": "extractive",
+    "embedder": "sentence-transformers/all-MiniLM-L6-v2"
+  },
+  "summary": {
+    "full": {
+      "accuracy": 0.917,
+      "correct": 11,
+      "mean_prompt_tokens": 3521,
+      "mean_prompt_eval_seconds": 87.66
+    },
+    "recent": {
+      "accuracy": 0.0,
+      "correct": 0,
+      "mean_prompt_tokens": 429,
+      "mean_prompt_eval_seconds": 7.07
+    },
+    "cce": {
+      "accuracy": 0.917,
+      "correct": 11,
+      "mean_prompt_tokens": 495,
+      "mean_prompt_eval_seconds": 11.47
+    }
+  },
+  "by_question_type": {
+    "lexical": {
+      "full": 1.0,
+      "recent": 0.0,
+      "cce": 1.0
+    },
+    "paraphrase": {
+      "full": 0.833,
+      "recent": 0.0,
+      "cce": 0.833
+    }
+  },
+  "rows": [
+    {
+      "question": "How many days until the staging database password rotates?",
+      "kind": "lexical",
+      "keys": [
+        "45"
+      ],
+      "turns_from_end": 112,
+      "cce_build_seconds": 7.59,
+      "full": {
+        "answer": "The staging database password rotates every 45 days.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3521,
+        "cached_tokens": 0,
+        "prompt_ms": 92846.949,
+        "seconds": 97.47,
+        "correct": true
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 305,
+        "cached_tokens": 0,
+        "prompt_ms": 7977.636,
+        "seconds": 8.64,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The staging database password rotates every 45 days.",
+        "finish_reason": "stop",
+        "prompt_tokens": 397,
+        "cached_tokens": 0,
+        "prompt_ms": 10181.726,
+        "seconds": 12.16,
+        "correct": true
+      }
+    },
+    {
+      "question": "In which city will my sibling be getting married?",
+      "kind": "paraphrase",
+      "keys": [
+        "pune"
+      ],
+      "turns_from_end": 108,
+      "cce_build_seconds": 2.23,
+      "full": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 3521,
+        "cached_tokens": 0,
+        "prompt_ms": 90594.418,
+        "seconds": 91.11,
+        "correct": false
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 305,
+        "cached_tokens": 261,
+        "prompt_ms": 1227.024,
+        "seconds": 1.69,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The wedding will be in Pune.",
+        "finish_reason": "stop",
+        "prompt_tokens": 410,
+        "cached_tokens": 0,
+        "prompt_ms": 9372.785,
+        "seconds": 10.33,
+        "correct": true
+      }
+    },
+    {
+      "question": "What is the internal codename for the new app?",
+      "kind": "lexical",
+      "keys": [
+        "bluefin"
+      ],
+      "turns_from_end": 104,
+      "cce_build_seconds": 2.26,
+      "full": {
+        "answer": "The internal codename for the new app is Bluefin.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3522,
+        "cached_tokens": 0,
+        "prompt_ms": 91117.307,
+        "seconds": 93.2,
+        "correct": true
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 386,
+        "cached_tokens": 0,
+        "prompt_ms": 9546.443,
+        "seconds": 10.01,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Our internal codename for the new app is Bluefin.",
+        "finish_reason": "stop",
+        "prompt_tokens": 445,
+        "cached_tokens": 0,
+        "prompt_ms": 10762.209,
+        "seconds": 12.44,
+        "correct": true
+      }
+    },
+    {
+      "question": "Is there an ingredient I must avoid because of an allergy?",
+      "kind": "paraphrase",
+      "keys": [
+        "cashew"
+      ],
+      "turns_from_end": 100,
+      "cce_build_seconds": 2.24,
+      "full": {
+        "answer": "Cashews must be avoided because of an allergy.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3523,
+        "cached_tokens": 0,
+        "prompt_ms": 91509.701,
+        "seconds": 93.46,
+        "correct": true
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 430,
+        "cached_tokens": 0,
+        "prompt_ms": 10651.778,
+        "seconds": 11.17,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Cashews must be kept out of any recipe.",
+        "finish_reason": "stop",
+        "prompt_tokens": 511,
+        "cached_tokens": 0,
+        "prompt_ms": 12591.823,
+        "seconds": 14.08,
+        "correct": true
+      }
+    },
+    {
+      "question": "When is our production deploy window?",
+      "kind": "lexical",
+      "keys": [
+        "tuesday",
+        "3"
+      ],
+      "turns_from_end": 94,
+      "cce_build_seconds": 2.24,
+      "full": {
+        "answer": "Our production deploy window is Tuesday at 3 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3518,
+        "cached_tokens": 0,
+        "prompt_ms": 90363.848,
+        "seconds": 92.28,
+        "correct": true
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 302,
+        "cached_tokens": 260,
+        "prompt_ms": 1269.254,
+        "seconds": 1.82,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Our production deploy window is Tuesday at 3 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 400,
+        "cached_tokens": 0,
+        "prompt_ms": 9962.278,
+        "seconds": 11.52,
+        "correct": true
+      }
+    },
+    {
+      "question": "Which city do we ship stock from?",
+      "kind": "paraphrase",
+      "keys": [
+        "hyderabad"
+      ],
+      "turns_from_end": 78,
+      "cce_build_seconds": 2.19,
+      "full": {
+        "answer": "The warehouse is located in Hyderabad.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3519,
+        "cached_tokens": 0,
+        "prompt_ms": 84528.433,
+        "seconds": 85.93,
+        "correct": true
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 426,
+        "cached_tokens": 384,
+        "prompt_ms": 1619.625,
+        "seconds": 2.17,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The warehouse is located in Hyderabad.",
+        "finish_reason": "stop",
+        "prompt_tokens": 471,
+        "cached_tokens": 0,
+        "prompt_ms": 11090.216,
+        "seconds": 12.09,
+        "correct": true
+      }
+    },
+    {
+      "question": "What is my goal time for the half marathon?",
+      "kind": "lexical",
+      "keys": [
+        "1",
+        "52"
+      ],
+      "turns_from_end": 70,
+      "cce_build_seconds": 2.2,
+      "full": {
+        "answer": "Your marathon goal time is 1 hour 52 minutes for the half distance.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3521,
+        "cached_tokens": 0,
+        "prompt_ms": 84692.383,
+        "seconds": 87.61,
+        "correct": true
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 642,
+        "cached_tokens": 0,
+        "prompt_ms": 15367.932,
+        "seconds": 15.93,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Your marathon goal time is 1 hour 52 minutes for the half distance.",
+        "finish_reason": "stop",
+        "prompt_tokens": 697,
+        "cached_tokens": 0,
+        "prompt_ms": 16625.302,
+        "seconds": 19.42,
+        "correct": true
+      }
+    },
+    {
+      "question": "How much do we lose to processing costs on each sale?",
+      "kind": "paraphrase",
+      "keys": [
+        "2.1"
+      ],
+      "turns_from_end": 54,
+      "cce_build_seconds": 2.18,
+      "full": {
+        "answer": "Our payment provider charges a 2.1 percent fee per transaction.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3523,
+        "cached_tokens": 0,
+        "prompt_ms": 86432.671,
+        "seconds": 88.92,
+        "correct": true
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 496,
+        "cached_tokens": 0,
+        "prompt_ms": 11081.363,
+        "seconds": 11.47,
+        "correct": false
+      },
+      "cce": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 543,
+        "cached_tokens": 0,
+        "prompt_ms": 12104.87,
+        "seconds": 12.4,
+        "correct": false
+      }
+    },
+    {
+      "question": "Under what name is the Kyoto hotel booked?",
+      "kind": "lexical",
+      "keys": [
+        "rao"
+      ],
+      "turns_from_end": 48,
+      "cce_build_seconds": 2.2,
+      "full": {
+        "answer": "The Kyoto hotel is booked under the name Rao.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3520,
+        "cached_tokens": 0,
+        "prompt_ms": 84290.745,
+        "seconds": 86.03,
+        "correct": true
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 414,
+        "cached_tokens": 0,
+        "prompt_ms": 9468.505,
+        "seconds": 9.92,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The Kyoto hotel is booked under the name Rao.",
+        "finish_reason": "stop",
+        "prompt_tokens": 462,
+        "cached_tokens": 0,
+        "prompt_ms": 10526.396,
+        "seconds": 11.85,
+        "correct": true
+      }
+    },
+    {
+      "question": "Which person should be paged first if production breaks?",
+      "kind": "paraphrase",
+      "keys": [
+        "meera"
+      ],
+      "turns_from_end": 38,
+      "cce_build_seconds": 2.2,
+      "full": {
+        "answer": "The on-call engineer this month is Meera, and her backup is Dev.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3522,
+        "cached_tokens": 0,
+        "prompt_ms": 85338.813,
+        "seconds": 88.07,
+        "correct": true
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 386,
+        "cached_tokens": 341,
+        "prompt_ms": 1305.019,
+        "seconds": 1.83,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The on-call engineer this month is Meera, and her backup is Dev.",
+        "finish_reason": "stop",
+        "prompt_tokens": 448,
+        "cached_tokens": 113,
+        "prompt_ms": 7849.881,
+        "seconds": 10.1,
+        "correct": true
+      }
+    },
+    {
+      "question": "On which day do I do my long run?",
+      "kind": "lexical",
+      "keys": [
+        "saturday"
+      ],
+      "turns_from_end": 28,
+      "cce_build_seconds": 2.29,
+      "full": {
+        "answer": "You usually do your long run on Saturdays at 6 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3521,
+        "cached_tokens": 0,
+        "prompt_ms": 85361.074,
+        "seconds": 87.51,
+        "correct": true
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 628,
+        "cached_tokens": 0,
+        "prompt_ms": 13957.003,
+        "seconds": 14.36,
+        "correct": false
+      },
+      "cce": {
+        "answer": "You usually do your long run on Saturdays at 6 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 683,
+        "cached_tokens": 0,
+        "prompt_ms": 15865.132,
+        "seconds": 17.64,
+        "correct": true
+      }
+    },
+    {
+      "question": "What is the most we are allowed to spend on hosting each month?",
+      "kind": "paraphrase",
+      "keys": [
+        "800"
+      ],
+      "turns_from_end": 24,
+      "cce_build_seconds": 2.21,
+      "full": {
+        "answer": "Our monthly cloud budget is capped at 800 dollars.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3525,
+        "cached_tokens": 0,
+        "prompt_ms": 84827.98,
+        "seconds": 86.97,
+        "correct": true
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 432,
+        "cached_tokens": 383,
+        "prompt_ms": 1380.4,
+        "seconds": 1.84,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Our monthly cloud budget is capped at 800 dollars.",
+        "finish_reason": "stop",
+        "prompt_tokens": 476,
+        "cached_tokens": 0,
+        "prompt_ms": 10661.252,
+        "seconds": 12.41,
+        "correct": true
+      }
+    }
+  ]
+}
