@@ -75,6 +75,19 @@ class RetrievalResult:
         )
 
 
+_OVERVIEW = re.compile(
+    r"(overview|recap|summar(?:y|ise|ize)|main (?:topics|points)|what (?:did|have) we (?:talk|discuss|cover|go)\w*|"
+    r"topics? (?:we|did)|everything we (?:covered|discussed|talked)|remind me of|so far)",
+    re.IGNORECASE,
+)
+
+
+def is_overview_query(query: str) -> bool:
+    """True for "what did we talk about?"-style questions: nothing in them matches one message,
+    so the right context is a compact view of every topic, not the few best matches."""
+    return bool(_OVERVIEW.search(query or ""))
+
+
 def node_evidence(node: MemoryNode, qvec: np.ndarray, max_items: int = 4, min_ratio: float = 0.65,
                   min_sim: float = 0.2) -> list[str]:
     """
@@ -193,6 +206,10 @@ class Retriever:
                 best_turn=best_text,
             ))
 
+        if is_overview_query(query):
+            # Every topic, in the order they happened (capped), instead of the few closest matches.
+            overview = sorted(results, key=lambda r: r.node.turn_start)[: self.config.overview_max_topics]
+            return overview
         results.sort(key=lambda r: -r.composite_score)
         top = results[:top_k]
         for r in top:
