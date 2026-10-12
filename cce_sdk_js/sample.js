@@ -1,0 +1,37 @@
+// A sample conversation that wanders across four topics, used by the demo and the tests.
+export const SAMPLE_CONVERSATION = [
+  { role: "user", content: "I want to build a billing dashboard for my SaaS product. Where should I start?" },
+  { role: "assistant", content: "Start with the data model: plans, customers, subscriptions and invoices. Then add a webhook handler so your payment provider can tell you when a payment succeeds or fails. Finally build the dashboard views on top of those tables." },
+  { role: "user", content: "How should the webhook handler verify that events really come from the payment provider?" },
+  { role: "assistant", content: "Verify the HMAC signature header against the raw request body using your webhook secret before you parse anything. Reject events with a timestamp older than five minutes to prevent replay attacks, and store the event id so you never process the same webhook twice." },
+  { role: "user", content: "What invoice states do I need for the billing dashboard?" },
+  { role: "assistant", content: "Keep it simple: draft, open, paid, void and uncollectible. Only the webhook handler should move an invoice to paid, so the dashboard never lies about revenue. Add an audit log table recording every state change." },
+  { role: "user", content: "Switching topics. I am cooking dinner tonight and want something quick with pasta." },
+  { role: "assistant", content: "Try spaghetti aglio e olio. Boil the pasta in well salted water, slowly warm sliced garlic in olive oil, add chili flakes, then toss everything with a splash of pasta water. It takes about fifteen minutes." },
+  { role: "user", content: "My pasta sauce always tastes bland. Any tips?" },
+  { role: "assistant", content: "Salt the pasta water generously, finish the sauce with the starchy pasta water so it clings, and add acid at the end. A squeeze of lemon or a spoon of good parmesan lifts the whole dish. Fresh basil goes in last." },
+  { role: "user", content: "Can I make the garlic less sharp?" },
+  { role: "assistant", content: "Yes. Cook the garlic gently in cold oil that warms slowly, and stop before it browns. Burnt garlic turns bitter, so lower the heat the moment it smells sweet and nutty." },
+  { role: "user", content: "New topic: I am training for my first half marathon in twelve weeks." },
+  { role: "assistant", content: "Great goal. Run three or four days a week, with one long run that grows by about ten percent each week. Keep most runs easy enough to hold a conversation, and add one short session of faster intervals." },
+  { role: "user", content: "How do I avoid shin splints while I build mileage?" },
+  { role: "assistant", content: "Increase mileage gradually, run on softer surfaces when you can, and replace your running shoes every five hundred to eight hundred kilometres. Strengthen your calves and ankles twice a week, and take a rest day seriously when shins feel sore." },
+  { role: "user", content: "What should I eat before the long run on Sunday?" },
+  { role: "assistant", content: "Eat a carbohydrate rich meal two to three hours before, such as oats with banana. During runs longer than ninety minutes, take a gel or dates every forty minutes and sip water regularly." },
+  { role: "user", content: "Different problem: my Python script crashes with a KeyError when reading the config file." },
+  { role: "assistant", content: "A KeyError means the dictionary does not contain that key. Print the keys of the loaded config to see what is really there, check for typos and letter case, and use config.get('name', default) when a value is optional." },
+  { role: "user", content: "The config is YAML and some keys are missing on purpose. How do I handle defaults cleanly?" },
+  { role: "assistant", content: "Define a dataclass with default values and build it from the YAML dictionary, or validate with pydantic so missing keys fall back to defaults and wrong types raise a clear error at startup instead of deep inside the program." },
+  { role: "user", content: "Back to the billing dashboard: how do I show monthly recurring revenue?" },
+  { role: "assistant", content: "Compute MRR by summing the monthly equivalent of every active subscription at the end of each month. Exclude one time charges, convert yearly plans by dividing by twelve, and chart new, expansion, contraction and churned MRR separately." },
+  { role: "user", content: "And how often should the dashboard numbers refresh?" },
+  { role: "assistant", content: "Update them from webhook events as they arrive and cache the aggregates for a minute. A nightly job should recompute everything from the invoices table so any drift is corrected." },
+  { role: "user", content: "What was the advice about verifying webhooks again?" },
+];
+
+export const SAMPLE_QUERIES = [
+  "How do I verify webhook signatures?",
+  "How do I make pasta sauce taste better?",
+  "How do I prevent shin splints?",
+  "Why does my config throw a KeyError?",
+];

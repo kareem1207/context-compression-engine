@@ -8,6 +8,10 @@ wheels/
 
 # Virtual environments
 .venv
-tests/
 
 *.sh
+
+# Local runtime data and tool caches
+.cce_data/
+.pytest_cache/
+node_modules/
