@@ -51,6 +51,7 @@ class CCEConfig:
 
     # ── Retrieval ─────────────────────────────────────────────────────────────
     retrieval_top_k: int = 5              # how many chunks to retrieve per query
+    overview_max_topics: int = 12         # overview questions ("what did we cover?") show up to this many topics
     retrieval_recency_boost: float = 0.2  # added to score for recent chunks
     context_max_tokens: int = 2048        # hard cap on assembled context payload
 

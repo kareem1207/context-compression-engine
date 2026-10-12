@@ -107,10 +107,15 @@ class StatelessProcessor:
         # In-memory retrieval (no DB — use pure vector math)
         query_emb = self.engine.chunker.embed_text(query)
         scored = self._score_nodes(query_emb, past_nodes)
-        top_results = scored[:top_k]
+        from cce_core.retrieval.retriever import is_overview_query
+
+        if is_overview_query(query):
+            top_results = sorted(scored, key=lambda x: x[0].turn_start)[: self.config.overview_max_topics]
+        else:
+            top_results = scored[:top_k]
 
         # Build context payload
-        from cce_core.retrieval.retriever import RetrievalResult
+        from cce_core.retrieval.retriever import RetrievalResult, node_evidence
         retrieval_results = [
             RetrievalResult(
                 node=node,
@@ -119,6 +124,7 @@ class StatelessProcessor:
                 keyword_score=0.0,
                 composite_score=float(score),
                 best_turn=best_text,
+                evidence=[] if is_overview_query(query) else node_evidence(node, query_emb.astype("float32")),
             )
             for node, score, best_text in top_results
         ]

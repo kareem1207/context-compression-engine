@@ -61,3 +61,43 @@ def test_turn_vectors_survive_the_warm_tier(tmp_path):
     stored = reopened.warm.get_all(session_id="persist")
     assert stored and all(decode_turn_vecs(n.metadata) is not None for n in stored)
     reopened.close()
+
+
+def test_list_spread_over_several_messages_is_all_present(tmp_path):
+    """Answers built up turn by turn: every item must reach the context, not just one quote per topic."""
+    items = ["register the domain name", "publish the privacy policy", "run the payment test", "prepare the press kit"]
+    msgs = []
+    for i, (u, a) in enumerate(FILLER * 2):
+        msgs += [{"role": "user", "content": u}, {"role": "assistant", "content": a}]
+        if i < len(items):
+            msgs += [{"role": "user", "content": f"For the launch checklist, we also need to {items[i]}."},
+                     {"role": "assistant", "content": "Got it, I will keep that in mind."}]
+    engine = CCEEngine(CCEConfig(embedder="hash", base_dir=tmp_path, hot_tier_max_turns=2, retrieval_top_k=5,
+                                 meso_max_tokens=60, hash_chunk_similarity_threshold=0.0, chunk_max_turns=40))
+    res = engine.create_stateless_processor().process(msgs, "What is everything on our launch checklist?")
+    context = "\n".join(m["content"] for m in res.payload.to_messages()).lower()
+    for word in ("domain", "privacy", "payment", "press"):
+        assert word in context, word
+
+
+def test_overview_questions_are_recognised():
+    from cce_core.retrieval.retriever import is_overview_query
+    for q in ["What did we talk about?", "Give me an overview of everything we covered.", "summarize the chat", "Recap please"]:
+        assert is_overview_query(q), q
+    for q in ["When is our production deploy window?", "Which nut am I allergic to?"]:
+        assert not is_overview_query(q), q
+
+
+def test_overview_question_shows_every_topic(tmp_path):
+    engine = CCEEngine(CCEConfig(embedder="hash", base_dir=tmp_path, hot_tier_max_turns=2, retrieval_top_k=2,
+                                 hash_chunk_similarity_threshold=0.3, chunk_min_turns=2))
+    topics = [
+        ("Explain how sourdough starters ferment flour.", "A sourdough starter ferments flour with wild yeast and bacteria."),
+        ("How do I train for a marathon?", "Build weekly mileage slowly and keep most runs easy."),
+        ("What is a Python decorator?", "A decorator wraps a function to add behaviour without changing its code."),
+    ]
+    msgs = [{"role": r, "content": c} for u, a in topics for r, c in (("user", u), ("assistant", a))]
+    res = engine.create_stateless_processor().process(msgs, "What did we talk about?")
+    ctx = "\n".join(m["content"] for m in res.payload.to_messages()).lower()
+    for word in ("sourdough", "marathon", "decorator"):
+        assert word in ctx, word
