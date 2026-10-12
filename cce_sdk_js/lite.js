@@ -189,22 +189,29 @@ export function chunk(turns, cfg = DEFAULTS) {
 
 /* ---------------------------- extractive summaries --------------------------- */
 
-function extractiveSummarize(text, maxTokens) {
-  const sentences = String(text).split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
-  if (!sentences.length) return truncateToTokens(text, maxTokens);
-  if (sentences.length === 1) return truncateToTokens(sentences[0], maxTokens);
+const splitSentences = (text) => String(text).split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
+
+/**
+ * Picks the most representative sentences. `input` is plain text, or a list of
+ * { s, bonus } so callers can favour some sentences (answers over questions).
+ */
+function extractiveSummarize(input, maxTokens) {
+  const items = Array.isArray(input) ? input : splitSentences(input).map((s) => ({ s, bonus: 0 }));
+  const text = items.map((x) => x.s).join(" ");
+  if (!items.length) return "";
+  if (items.length === 1) return truncateToTokens(items[0].s, maxTokens);
 
   const freq = new Map();
   contentWords(text).forEach((w) => freq.set(w, (freq.get(w) || 0) + 1));
   const top = new Set([...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20).map(([w]) => w));
 
-  const scored = sentences
-    .map((s, i) => {
+  const scored = items
+    .map(({ s, bonus }, i) => {
       const ws = new Set(contentWords(s));
-      if (!ws.size) return { s, i, score: 0 };
+      if (!ws.size) return { s, i, score: bonus };
       let overlap = 0;
       ws.forEach((w) => top.has(w) && overlap++);
-      return { s, i, score: overlap / ws.size + Math.min(s.split(/\s+/).length / 20, 1) * 0.2 };
+      return { s, i, score: overlap / ws.size + Math.min(s.split(/\s+/).length / 20, 1) * 0.2 + bonus };
     })
     .sort((a, b) => b.score - a.score);
 
@@ -223,9 +230,14 @@ function extractiveSummarize(text, maxTokens) {
 export const micro = (turn, cfg = DEFAULTS) => (turn.tokens <= cfg.microMaxTokens ? turn.content : extractiveSummarize(turn.content, cfg.microMaxTokens));
 
 export function meso(group, cfg = DEFAULTS) {
-  // Role labels are dropped so summaries read as plain notes.
+  // Role labels are dropped so summaries read as plain notes. Answers are favoured over questions,
+  // because the answer is usually what a later question needs.
   const text = group.turns.map((t) => t.content).join(" ");
-  return countTokens(text) <= cfg.mesoMaxTokens ? text : extractiveSummarize(text, cfg.mesoMaxTokens);
+  if (countTokens(text) <= cfg.mesoMaxTokens) return text;
+  const items = group.turns.flatMap((t) =>
+    splitSentences(t.content).map((s) => ({ s, bonus: (t.role === "assistant" ? 0.3 : 0) - (s.endsWith("?") ? 0.4 : 0) }))
+  );
+  return extractiveSummarize(items, cfg.mesoMaxTokens);
 }
 
 export function macro(nodes, cfg = DEFAULTS) {
@@ -236,6 +248,7 @@ export function macro(nodes, cfg = DEFAULTS) {
 /** Turns -> memory nodes (topic chunks with summaries and an embedding). */
 export function compress(turns, cfg = DEFAULTS) {
   return chunk(turns, cfg).map((g, i) => {
+    const turnEmbeddings = g.turns.map((t) => embed(t.content, cfg.embedDim));
     const tokensRaw = g.turns.reduce((a, t) => a + t.tokens, 0);
     const mesoSummary = meso(g, cfg);
     return {
@@ -246,7 +259,8 @@ export function compress(turns, cfg = DEFAULTS) {
       turns: g.turns,
       microSummaries: g.turns.map((t) => micro(t, cfg)),
       mesoSummary,
-      embedding: meanVec(g.turns.map((t) => embed(t.content, cfg.embedDim))),
+      turnEmbeddings,
+      embedding: meanVec(turnEmbeddings),
       tokensRaw,
       tokensCompressed: countTokens(mesoSummary),
     };
@@ -255,20 +269,37 @@ export function compress(turns, cfg = DEFAULTS) {
 
 /* --------------------------------- retrieval -------------------------------- */
 
-export function retrieve(nodes, query, cfg = DEFAULTS, topK = cfg.retrievalTopK) {
+/**
+ * `ignoreFrom`: turns at or after this index are skipped when matching, because the recent
+ * (hot) turns are sent verbatim anyway and should not "win" a topic.
+ */
+export function retrieve(nodes, query, cfg = DEFAULTS, topK = cfg.retrievalTopK, ignoreFrom = Infinity) {
   if (!nodes.length) return [];
   const q = embed(query, cfg.embedDim);
   const kw = new Set(contentWords(query));
   const maxEnd = Math.max(...nodes.map((n) => n.turnEnd), 1);
   return nodes
     .map((node) => {
-      const semantic = cosine(q, node.embedding);
+      // A topic is judged by its best-matching message, so one specific answer is not diluted by the rest of the topic.
+      let semantic = 0;
+      let bestTurn = node.turns[0];
+      node.turnEmbeddings.forEach((e, i) => {
+        if (node.turns[i].index >= ignoreFrom) return;
+        const c = cosine(q, e);
+        if (c > semantic) {
+          semantic = c;
+          bestTurn = node.turns[i];
+        }
+      });
+      // If a question matched best, the useful part is the answer that followed it.
+      const next = node.turns[node.turns.indexOf(bestTurn) + 1];
+      if (bestTurn.role === "user" && next && next.role === "assistant") bestTurn = next;
       const recency = (node.turnEnd / maxEnd) * cfg.retrievalRecencyBoost;
       const target = new Set(contentWords(`${node.topicLabel} ${node.mesoSummary}`));
       let overlap = 0;
       kw.forEach((w) => target.has(w) && overlap++);
       const keyword = (kw.size ? overlap / kw.size : 0) * cfg.keywordBonusWeight;
-      return { node, semantic, recency, keyword, score: semantic + recency + keyword };
+      return { node, bestTurn, semantic, recency, keyword, score: semantic + recency + keyword };
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
@@ -279,8 +310,14 @@ export function retrieve(nodes, query, cfg = DEFAULTS, topK = cfg.retrievalTopK)
 const SYSTEM_NOTE =
   "The following conversation context has been compressed by the Context Compression Engine (CCE). 'Past context' contains summarized topic blocks from earlier in the conversation. 'Recent context' contains the verbatim last few messages. Use both to answer accurately.";
 
-function block(node) {
-  return `[Topic: ${node.topicLabel}] (turns ${node.turnStart}-${node.turnEnd})\n${node.mesoSummary}\n---`;
+function block(node, bestTurn) {
+  const lines = [`[Topic: ${node.topicLabel}] (turns ${node.turnStart}-${node.turnEnd})`, node.mesoSummary];
+  // Quote the best-matching message when the summary left it out.
+  if (bestTurn && !node.mesoSummary.includes(bestTurn.content.slice(0, 40))) {
+    lines.push(`Most relevant (turn ${bestTurn.index}): ${truncateToTokens(bestTurn.content, 60)}`);
+  }
+  lines.push("---");
+  return lines.join("\n");
 }
 
 export function buildContext(results, hotTurns, cfg = DEFAULTS) {
@@ -291,7 +328,7 @@ export function buildContext(results, hotTurns, cfg = DEFAULTS) {
   let used = 0;
   let truncated = false;
   for (const r of results) {
-    const b = block(r.node);
+    const b = block(r.node, r.bestTurn);
     const t = countTokens(b);
     if (used + t > budget) {
       const remaining = budget - used;
@@ -333,7 +370,7 @@ export function createEngine(overrides = {}) {
       const turns = segment(messages);
       const nodes = compress(turns, cfg);
       const hot = turns.slice(-cfg.hotTierMaxTurns);
-      const results = retrieve(nodes, query, cfg, topK);
+      const results = retrieve(nodes, query, cfg, topK, hot.length ? turns.length - hot.length : Infinity);
       const payload = buildContext(results, hot, cfg);
       const st = stats(turns, nodes);
       const rawTokens = st.rawTokens;

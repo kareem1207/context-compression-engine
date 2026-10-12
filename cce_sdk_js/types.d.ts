@@ -91,12 +91,14 @@ export interface MemoryNode {
   microSummaries: string[];
   mesoSummary: string;
   embedding: Float32Array;
+  turnEmbeddings: Float32Array[];
   tokensRaw: number;
   tokensCompressed: number;
 }
 
 export interface RetrievalResult {
   node: MemoryNode;
+  bestTurn: Turn;
   semantic: number;
   recency: number;
   keyword: number;
@@ -143,7 +145,7 @@ export function createEngine(overrides?: Partial<LiteConfig>): LiteEngine;
 export function countTokens(text: string): number;
 export function segment(messages: Message[] | string): Turn[];
 export function compress(turns: Turn[], config?: LiteConfig): MemoryNode[];
-export function retrieve(nodes: MemoryNode[], query: string, config?: LiteConfig, topK?: number): RetrievalResult[];
+export function retrieve(nodes: MemoryNode[], query: string, config?: LiteConfig, topK?: number, ignoreFrom?: number): RetrievalResult[];
 export function buildContext(results: RetrievalResult[], hotTurns: Turn[], config?: LiteConfig): ContextPayload;
 export function embed(text: string, dim?: number): Float32Array;
 export function cosine(a: Float32Array, b: Float32Array): number;
