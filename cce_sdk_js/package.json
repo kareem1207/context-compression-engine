@@ -9,7 +9,7 @@
     ".": { "types": "./types.d.ts", "default": "./index.js" },
     "./lite": { "types": "./types.d.ts", "default": "./lite.js" }
   },
-  "files": ["index.js", "client.js", "lite.js", "sample.js", "types.d.ts"],
+  "files": ["index.js", "client.js", "lite.js", "sample.js", "types.d.ts", "README.md", "LICENSE"],
   "scripts": {
     "test": "node --test test/*.test.js"
   },
@@ -17,5 +17,7 @@
   "keywords": ["llm", "memory", "context", "compression", "mcp", "rag"],
   "license": "MIT",
   "author": "Shaik Kareem",
+  "homepage": "https://kareem1207.github.io/context-compression-engine/",
+  "bugs": "https://github.com/kareem1207/context-compression-engine/issues",
   "repository": { "type": "git", "url": "git+https://github.com/kareem1207/context-compression-engine.git" }
 }

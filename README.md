@@ -6,7 +6,7 @@ It runs fully offline by default (no LLM is needed to compress) and plugs into a
 
 **[Try the live demo in your browser](https://kareem1207.github.io/context-compression-engine/)**: paste a conversation, see it split into topics, ask a question and compare the context a model would receive with the full history.
 
-> **Status: working prototype (v0.1).** The core engine, memory tiers, retrieval, sessions, MCP server, REST API, JavaScript client and a live dashboard are implemented and tested. Benchmarks are in [`benchmarks/`](benchmarks/README.md). On local models, CCE found facts said long ago with about 90% fewer tokens than resending the chat, and far more often than sending the newest messages that fit. **But a plain search over raw messages does just as well at finding a single stated fact**, and we have not yet tested the cases where summaries should help. Read the limits before relying on it.
+> **Status: working prototype (v0.1).** The core engine, memory tiers, retrieval, sessions, MCP server, REST API, JavaScript client and a live dashboard are implemented and tested. Benchmarks are in [`benchmarks/`](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md). On local models, CCE found facts said long ago with about 90% fewer tokens than resending the chat, and far more often than sending the newest messages that fit. **But a plain search over raw messages does just as well at finding a single stated fact**, and we have not yet tested the cases where summaries should help. Read the limits before relying on it.
 
 ---
 
@@ -140,7 +140,7 @@ Example MCP client configuration (adjust the path):
 }
 ```
 
-See [`examples/mcp_claude_demo.md`](examples/mcp_claude_demo.md) for a walkthrough.
+See [`examples/mcp_claude_demo.md`](https://github.com/kareem1207/context-compression-engine/blob/main/examples/mcp_claude_demo.md) for a walkthrough.
 
 ### Use it over HTTP (any language)
 
@@ -168,7 +168,7 @@ Configuration comes from the `CCE_*` variables below; set `CCE_CORS_ORIGINS` (co
 
 ### Use it from JavaScript
 
-[`cce_sdk_js`](cce_sdk_js) has two parts, no dependencies, Node 18+ and browsers:
+[`cce_sdk_js`](https://github.com/kareem1207/context-compression-engine/blob/main/cce_sdk_js) has two parts, no dependencies, Node 18+ and browsers:
 
 ```js
 // 1) Talk to the REST API above
@@ -201,7 +201,7 @@ The end-to-end demos (`examples/showcase_demo.py`, `examples/mcp_live_demo.py`, 
 
 ## Configuration
 
-All tunables live in [`cce_core/config.py`](cce_core/config.py) (`CCEConfig`). Highlights:
+All tunables live in [`cce_core/config.py`](https://github.com/kareem1207/context-compression-engine/blob/main/cce_core/config.py) (`CCEConfig`). Highlights:
 
 | Setting | Default | Meaning |
 |---|---|---|
@@ -259,7 +259,7 @@ cd cce_sdk_js && npm test                            # JavaScript: client and of
 ## Roadmap
 
 - [x] REST API (`cce_rest`), JavaScript client and offline engine (`cce_sdk_js`), browser demo
-- [x] Benchmarks on real chat text (retrieval, window overflow, two local models), see [`benchmarks/`](benchmarks/README.md)
+- [x] Benchmarks on real chat text (retrieval, window overflow, two local models), see [`benchmarks/`](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md)
 - [x] MIT licence, packaging metadata, optional API key for the REST API
 - [ ] Test what plain retrieval cannot do: questions that need a summary of a whole topic or session
 - [ ] Benchmark on messy real conversations and with a hosted model
@@ -269,7 +269,7 @@ cd cce_sdk_js && npm test                            # JavaScript: client and of
 
 ## License
 
-[MIT](LICENSE). Copyright (c) 2026 Shaik Kareem.
+[MIT](https://github.com/kareem1207/context-compression-engine/blob/main/LICENSE). Copyright (c) 2026 Shaik Kareem.
 
 ## Author
 
