@@ -6,7 +6,7 @@ It runs fully offline by default (no LLM is needed to compress) and plugs into a
 
 **[Try the live demo in your browser](https://kareem1207.github.io/context-compression-engine/)**: paste a conversation, see it split into topics, ask a question and compare the context a model would receive with the full history.
 
-> **Status: working prototype (v0.1).** The core engine, memory tiers, retrieval, sessions, MCP server, REST API, JavaScript client and a live dashboard are implemented and tested. Benchmarks are in [`benchmarks/`](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md). On local models, CCE found facts said long ago with about 90% fewer tokens than resending the chat, and far more often than sending the newest messages that fit. **But a plain search over raw messages does just as well at finding a single stated fact**, and we have not yet tested the cases where summaries should help. Read the limits before relying on it.
+> **Status: working prototype (v0.1).** The core engine, memory tiers, retrieval, sessions, MCP server, REST API, JavaScript client and a live dashboard are implemented and tested. Benchmarks are in [`benchmarks/`](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md). On local models, CCE found facts said long ago with about 90% fewer tokens than resending the chat, and far more often than sending the newest messages that fit. **But a plain search over raw messages does just as well**: CCE tied it on single facts, lists and corrections, and on lists it first lost until we fixed it. We have not tested the cases where summaries should help. Read the limits before relying on it.
 
 ---
 

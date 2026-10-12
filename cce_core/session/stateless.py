@@ -110,7 +110,7 @@ class StatelessProcessor:
         top_results = scored[:top_k]
 
         # Build context payload
-        from cce_core.retrieval.retriever import RetrievalResult
+        from cce_core.retrieval.retriever import RetrievalResult, node_evidence
         retrieval_results = [
             RetrievalResult(
                 node=node,
@@ -119,6 +119,7 @@ class StatelessProcessor:
                 keyword_score=0.0,
                 composite_score=float(score),
                 best_turn=best_text,
+                evidence=node_evidence(node, query_emb.astype("float32")),
             )
             for node, score, best_text in top_results
         ]

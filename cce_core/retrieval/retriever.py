@@ -16,7 +16,7 @@ It does NOT modify any state.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -49,6 +49,7 @@ class RetrievalResult:
     keyword_score: float       # keyword overlap bonus
     composite_score: float     # final ranking score
     best_turn: str = ""        # text of the best-matching message in the node (for quoting)
+    evidence: list[str] = field(default_factory=list)   # all strongly matching messages in the node
 
     @property
     def compressed_text(self) -> str:
@@ -72,6 +73,26 @@ class RetrievalResult:
             f"score={self.composite_score:.3f}, "
             f"turns={self.node.turn_start}-{self.node.turn_end})"
         )
+
+
+def node_evidence(node: MemoryNode, qvec: np.ndarray, max_items: int = 4, min_ratio: float = 0.65,
+                  min_sim: float = 0.2) -> list[str]:
+    """
+    The messages in a node that match the query almost as well as its best one (in conversation order).
+
+    Needed for answers spread over several messages (a list built up turn by turn): a summary tends to
+    drop some of the items, and one quote per topic only shows one of them.
+    """
+    vecs = decode_turn_vecs(node.metadata)
+    if vecs is None or vecs.shape[1] != qvec.shape[0] or len(vecs) == 0:
+        return []
+    sims = vecs @ qvec
+    best = float(sims.max())
+    if best < min_sim:
+        return []
+    picked = [i for i in np.argsort(-sims)[:max_items] if sims[i] >= max(min_sim, min_ratio * best)]
+    micros = node.micro_summaries
+    return [micros[i] for i in sorted(picked) if i < len(micros)]
 
 
 def node_similarity(node: MemoryNode, qvec: np.ndarray) -> tuple[float, str]:
@@ -173,7 +194,10 @@ class Retriever:
             ))
 
         results.sort(key=lambda r: -r.composite_score)
-        return results[:top_k]
+        top = results[:top_k]
+        for r in top:
+            r.evidence = node_evidence(r.node, qvec)
+        return top
 
     def retrieve_by_turn(
         self,
