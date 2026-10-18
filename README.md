@@ -254,6 +254,7 @@ cd cce_sdk_js && npm test                            # JavaScript: client and of
 ## Design notes and limits
 
 - **Search is brute-force cosine similarity over a NumPy matrix.** For the default warm-tier size (hundreds of chunks) this beats building an ANN index and keeps dependencies small. It is not meant for millions of chunks.
+- **One search index per data folder, shared by all sessions in the process.** It follows the SQLite file (`PRAGMA data_version` plus a change log), so rows written by another process show up without a restart. Scoring a query runs no SQL; only the winning notes are read from disk.
 - **Compression only kicks in once a topic is longer than the summary budget** (`meso_max_tokens`). Short topics are kept as they are.
 - **The extractive summariser picks sentences; it does not paraphrase.** Use `llm` mode for more fluent summaries when a model is available.
 - **Live sessions keep their state in the same SQLite file.** The last `hot_tier_max_turns` turns, the turns waiting to be compressed, and the turn counters are saved as messages arrive, so a restart or crash picks up where it stopped. Waiting turns are sent to the model verbatim until they are compressed, so nothing falls in a gap. Compressed turns are not kept as raw text.
