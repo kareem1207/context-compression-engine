@@ -53,7 +53,7 @@ def create_app(config: CCEConfig | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=origins,
         allow_methods=["GET", "POST", "DELETE"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "Authorization", "X-API-Key"],
     )
     app.include_router(router)
     return app
@@ -62,9 +62,21 @@ def create_app(config: CCEConfig | None = None) -> FastAPI:
 app = create_app()
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     """Console entry point: `cce-rest`."""
+    import argparse
+
     import uvicorn
+
+    argparse.ArgumentParser(
+        prog="cce-rest",
+        description="Run the CCE REST API (docs at /docs).",
+        epilog=(
+            "Settings come from environment variables: CCE_HOST (default 127.0.0.1), CCE_PORT (9100), "
+            "CCE_API_KEY (required for a non-local host), CCE_CORS_ORIGINS, CCE_DATA_DIR, CCE_EMBEDDER, "
+            "CCE_HOT_TIER_TURNS, CCE_TOP_K, CCE_MAX_TOKENS, CCE_SUMMARIZER_MODE."
+        ),
+    ).parse_args(argv)
 
     host = os.getenv("CCE_HOST", "127.0.0.1")
     if host not in ("127.0.0.1", "localhost", "::1") and not os.getenv("CCE_API_KEY"):

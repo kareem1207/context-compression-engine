@@ -66,7 +66,5 @@ def test_mixing_embedders_gives_a_clear_error(tmp_path):
     store, _, _ = engine.full_pipeline(CONVO, "mix")
     store.close()
     other = CCEEngine(CCEConfig(embedder="neural", base_dir=tmp_path))
-    store2 = other.open_session("mix")
-    with pytest.raises(ValueError, match="dimensions"):
-        other.retrieve(store2, "webhook")
-    store2.close()
+    with pytest.raises(ValueError, match="dimensions"):     # refused when the session is opened
+        other.open_session("mix")

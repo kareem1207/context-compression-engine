@@ -6,7 +6,7 @@ CCE Visual Dashboard
 - You can also type your own messages after simulation
 - Rerun button resets and re-simulates everything
 
-Run: uv run python -m cce_ui.app
+Run: cce-ui   (or: uv run python -m cce_ui.app)
 Open: http://localhost:7860
 """
 
@@ -313,5 +313,6 @@ async def root():
 
 
 if __name__ == "__main__":
-    print("\n  CCE Dashboard → http://localhost:7860\n")
-    uvicorn.run(app, host="0.0.0.0", port=7860, log_level="warning")
+    from cce_ui.cli import main
+
+    main()

@@ -190,6 +190,7 @@ Install it with `npm install cce-client`. **CCE Lite** swaps the neural sentence
 
 ```bash
 uv run python -m cce_ui.app                     # dashboard: http://localhost:7860
+cce-ui                                           # same, after `pip install "context-compression-engine[ui]"` (listens on 127.0.0.1)
 uv run python examples/summarizer_showcase.py   # summariser showcase: http://localhost:7862
 uv run python examples/visual_demo.py
 ```
@@ -259,6 +260,8 @@ cd cce_sdk_js && npm test                            # JavaScript: client and of
 - **The extractive summariser picks sentences; it does not paraphrase.** Use `llm` mode for more fluent summaries when a model is available.
 - **Live sessions keep their state in the same SQLite file.** The last `hot_tier_max_turns` turns, the turns waiting to be compressed, and the turn counters are saved as messages arrive, so a restart or crash picks up where it stopped. Waiting turns are sent to the model verbatim until they are compressed, so nothing falls in a gap. Compressed turns are not kept as raw text.
 - **Token counts are estimates.** Offline, CCE estimates from words and characters (CJK text, code and JSON count higher than plain English). With the optional `tokens` extra (`tiktoken`) and its vocabulary already cached, counts are exact for `cl100k_base`; CCE never downloads it. Other models tokenize differently. `context_max_tokens` is a cap on this estimate.
+- **Session ids** are 1-64 characters of letters, digits, `_`, `.` and `-` (not `.`, `..` or `index`), in the library, the REST API and the MCP tools, because they become file names in the cold tier.
+- **A data folder remembers its embedder.** The first time a folder is opened, the embedder (name and vector size) is recorded. Opening it later with a different one (`CCE_EMBEDDER`, `hash_dim`, another model) fails with a clear error instead of returning bad matches. Notes hold no raw text, so they cannot be re-embedded; use the original embedder or a new folder.
 - **Databases are versioned** (`PRAGMA user_version`). A 0.1.x `.cce_data` folder is upgraded in place the first time it is opened; its notes are kept.
 - **SQLite is accessed with a lock** (single writer, many readers): fine for local use, not a multi-server deployment.
 - Compression ratio is reported per run by `engine.compression_stats(...)`. There is no published benchmark yet.

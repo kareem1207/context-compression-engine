@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import hmac
 import os
-import re
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
+
+from cce_core.ids import is_valid_session_id
 
 def require_key(authorization: Optional[str] = Header(default=None), x_api_key: Optional[str] = Header(default=None)):
     """When CCE_API_KEY is set, every /v1 route needs it (Bearer token or X-API-Key header)."""
@@ -23,7 +24,6 @@ def require_key(authorization: Optional[str] = Header(default=None), x_api_key: 
 router = APIRouter()
 secured = APIRouter(dependencies=[Depends(require_key)])
 
-_SESSION_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 Fmt = Literal["messages", "string", "dict"]
 
 
@@ -54,8 +54,8 @@ def _manager(request: Request):
 
 
 def _check_id(session_id: str) -> str:
-    if not _SESSION_RE.match(session_id):
-        raise HTTPException(status_code=422, detail="session_id must be 1-64 characters: letters, digits, _ . -")
+    if not is_valid_session_id(session_id):
+        raise HTTPException(status_code=422, detail="session_id must be 1-64 characters: letters, digits, _ . - (and not '.', '..' or 'index')")
     return session_id
 
 

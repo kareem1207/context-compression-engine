@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 import numpy as np
 
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
+from cce_core.ids import validate_session_id
 from cce_core.ingestion.segmenter import Turn
 from cce_core.compression.merger import MemoryNode
 from cce_core.memory.hot_tier import HotTier
@@ -60,7 +61,7 @@ class MemoryStore:
         compress_fn=None,        # Callable[[list[Turn], str], list[MemoryNode]]
         live_compress_fn=None,   # Callable[[list[Turn], str, bool], tuple[list[MemoryNode], int]]
     ):
-        self.session_id = session_id
+        self.session_id = validate_session_id(session_id)
         self.config = config
         self.compress_fn = compress_fn  # injected from CCEEngine
         self.live_compress_fn = live_compress_fn
