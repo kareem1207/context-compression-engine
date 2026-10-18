@@ -60,9 +60,6 @@ class SessionManager:
         # Active sessions: session_id → MemoryStore
         self._sessions: dict[str, MemoryStore] = {}
 
-        # Turn buffers: session_id → list[Turn] (for incremental processing)
-        self._turn_buffers: dict[str, list[Turn]] = {}
-
         # Session metadata registry
         self._registry: dict[str, dict] = self._load_registry()
 
@@ -81,7 +78,6 @@ class SessionManager:
 
             store = self.engine.open_session(session_id)
             self._sessions[session_id] = store
-            self._turn_buffers[session_id] = []
 
             # Register if new
             if session_id not in self._registry:
@@ -122,7 +118,6 @@ class SessionManager:
 
             store.close()
             del self._sessions[session_id]
-            del self._turn_buffers[session_id]
 
             if session_id in self._registry:
                 self._registry[session_id]["status"] = "closed"
@@ -154,9 +149,9 @@ class SessionManager:
             message: {"role": "user"|"assistant", "content": "..."}
         """
         store = self.get_or_open(session_id)
-        buf = self._turn_buffers[session_id]
 
-        turn = segment_incremental(message, buf, session_id=session_id)
+        # Numbering continues from the store's saved counter, also after a restart.
+        turn = segment_incremental(message, [], session_id=session_id, index=store.next_index)
         store.ingest_turn(turn)
 
         with self._lock:
@@ -175,16 +170,9 @@ class SessionManager:
         Bulk-add messages to a session. Efficient for loading history.
         """
         store = self.get_or_open(session_id)
-        buf = self._turn_buffers[session_id]
 
-        turns = segment(messages, session_id=session_id)
-        # Adjust indices to continue from existing buffer
-        offset = len(buf)
-        for t in turns:
-            t.index += offset
-        buf.extend(turns)
-
-        store.ingest_turns(turns)
+        turns = segment(messages, session_id=session_id, start_index=store.next_index)
+        store.ingest_turns(turns)   # one transaction: a crash keeps all of these turns or none
 
         with self._lock:
             if session_id in self._registry:

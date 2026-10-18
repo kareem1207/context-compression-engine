@@ -9,6 +9,10 @@ The payload has three sections, ordered for LLM readability:
       Retrieved memory nodes, formatted as titled topic blocks.
       Most relevant first (already ranked by Retriever).
 
+  [1b] EARLIER MESSAGES (live sessions — verbatim)
+      Turns that left the hot tier but are not in a topic note yet. Included
+      as they were said, so nothing is missing between past and recent context.
+
   [2] RECENT CONTEXT (hot tier — verbatim)
       Last N turns exactly as spoken. Always included in full.
 
@@ -46,6 +50,7 @@ _SYSTEM_NOTE = (
 )
 
 _PAST_HEADER = "=== PAST CONTEXT (compressed) ==="
+_PENDING_HEADER = "=== EARLIER MESSAGES (not summarised yet) ==="
 _RECENT_HEADER = "=== RECENT CONTEXT ==="
 _SEPARATOR = "---"
 
@@ -69,6 +74,7 @@ class ContextPayload:
     token_count: int
     retrieved_node_ids: list[str] = field(default_factory=list)
     was_truncated: bool = False
+    pending_turns: list[Turn] = field(default_factory=list)
 
     def to_messages(self) -> list[dict]:
         """
@@ -85,6 +91,10 @@ class ContextPayload:
             system_parts.append("")
             system_parts.append(_PAST_HEADER)
             system_parts.extend(self.past_blocks)
+        if self.pending_turns:
+            system_parts.append("")
+            system_parts.append(_PENDING_HEADER)
+            system_parts.extend(f"{t.role.upper()}: {t.content}" for t in self.pending_turns)
 
         messages.append({
             "role": "system",
@@ -106,6 +116,11 @@ class ContextPayload:
             parts.extend(self.past_blocks)
             parts.append("")
 
+        if self.pending_turns:
+            parts.append(_PENDING_HEADER)
+            parts.extend(f"{t.role.upper()}: {t.content}" for t in self.pending_turns)
+            parts.append("")
+
         if self.recent_turns:
             parts.append(_RECENT_HEADER)
             for turn in self.recent_turns:
@@ -118,6 +133,9 @@ class ContextPayload:
         return {
             "system_note": self.system_note,
             "past_blocks": self.past_blocks,
+            "pending_turns": [
+                {"role": t.role, "content": t.content} for t in self.pending_turns
+            ],
             "recent_turns": [
                 {"role": t.role, "content": t.content} for t in self.recent_turns
             ],
@@ -166,6 +184,8 @@ class ContextBuilder:
         system_note: str = _SYSTEM_NOTE,
         max_tokens: int | None = None,
         include_micro: bool = False,
+        pending_turns: list[Turn] | None = None,
+        pending_rank_fn=None,
     ) -> ContextPayload:
         """
         Build the context payload.
@@ -177,6 +197,9 @@ class ContextBuilder:
             max_tokens: Token budget. Defaults to config.context_max_tokens.
             include_micro: If True, include per-turn micro summaries under
                            each topic block (more detail, more tokens).
+            pending_turns: Turns not yet compressed into a note (live sessions), oldest first.
+                           Included verbatim; if they do not fit, `pending_rank_fn` (turns ->
+                           turns, best match first) picks which, otherwise the newest are kept.
 
         Returns:
             ContextPayload ready to export.
@@ -189,12 +212,18 @@ class ContextBuilder:
         overhead = 50  # headers, separators
         past_budget = budget - system_tokens - recent_tokens - overhead
 
+        # Pending turns come first: they are the only copy of that part of the conversation.
+        pending, pending_tokens, pending_cut = self._pack_pending(
+            pending_turns or [], past_budget if not results else int(past_budget * 0.6), pending_rank_fn
+        )
+        past_budget -= pending_tokens
+
         # Build past blocks within budget
         past_blocks, included_ids, was_truncated = self._build_past_blocks(
             results, past_budget, include_micro
         )
 
-        total_tokens = system_tokens + recent_tokens + overhead + sum(
+        total_tokens = system_tokens + recent_tokens + overhead + pending_tokens + sum(
             tokenizer.count(b) for b in past_blocks
         )
 
@@ -204,7 +233,8 @@ class ContextBuilder:
             system_note=system_note,
             token_count=total_tokens,
             retrieved_node_ids=included_ids,
-            was_truncated=was_truncated,
+            was_truncated=was_truncated or pending_cut,
+            pending_turns=pending,
         )
 
     def build_stateless(
@@ -221,11 +251,18 @@ class ContextBuilder:
         hot_turns = all_turns[-n_hot:] if len(all_turns) > n_hot else all_turns
         return self.build(results, hot_turns, max_tokens=max_tokens)
 
-    def build_empty(self, hot_turns: list[Turn]) -> ContextPayload:
+    def build_empty(
+        self,
+        hot_turns: list[Turn],
+        pending_turns: list[Turn] | None = None,
+        pending_rank_fn=None,
+    ) -> ContextPayload:
         """
-        Build a payload with no past context — just recent turns.
+        Build a payload with no past context — just recent turns (and pending ones, if any).
         Used when the warm tier is empty (brand new session).
         """
+        if pending_turns:
+            return self.build([], hot_turns, pending_turns=pending_turns, pending_rank_fn=pending_rank_fn)
         recent_tokens = sum(tokenizer.count(t.content) + 4 for t in hot_turns)
         return ContextPayload(
             past_blocks=[],
@@ -237,6 +274,28 @@ class ContextBuilder:
         )
 
     # ── Internal ──────────────────────────────────────────────────────────────
+
+    def _pack_pending(
+        self,
+        pending: list[Turn],
+        budget: int,
+        rank_fn,
+    ) -> tuple[list[Turn], int, bool]:
+        """Fit pending turns into `budget` tokens. Returns (turns in order, tokens used, was_cut)."""
+        if not pending or budget <= 0:
+            return [], 0, bool(pending)
+        cost = {t.index: tokenizer.count(f"{t.role.upper()}: {t.content}") + 4 for t in pending}
+        if sum(cost.values()) + 12 <= budget:
+            return list(pending), sum(cost.values()) + 12, False
+        order = rank_fn(list(pending)) if rank_fn else list(reversed(pending))
+        picked: list[Turn] = []
+        used = 12   # header
+        for t in order:
+            if used + cost[t.index] <= budget:
+                picked.append(t)
+                used += cost[t.index]
+        picked.sort(key=lambda t: t.index)
+        return picked, (used if picked else 0), True
 
     def _build_past_blocks(
         self,
