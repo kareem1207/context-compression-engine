@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 
@@ -81,17 +81,88 @@ def is_overview_query(query: str) -> bool:
     return bool(_OVERVIEW.search(query or ""))
 
 
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
+
+# raw_fn(node, positions) -> {position: original text of that turn}; positions index node.micro_summaries
+RawFn = Callable[["MemoryNode", "list[int]"], "dict[int, str]"]
+# embed_many(texts) -> (N, dim) unit vectors
+EmbedManyFn = Callable[["list[str]"], np.ndarray]
+
+
+def split_sentences(text: str) -> list[str]:
+    return [s.strip() for s in _SENTENCE_SPLIT.split(text) if s.strip()]
+
+
+def sentence_evidence(
+    node: MemoryNode,
+    qvec: np.ndarray,
+    sims: np.ndarray,
+    raw_fn: RawFn,
+    embed_many: EmbedManyFn,
+    max_turns: int = 12,
+    max_candidates: int = 40,
+    max_sentences: int = 4,
+    min_ratio: float = 0.5,
+    short_words: int = 6,
+) -> list[str]:
+    """
+    The sentences of a note's own messages that answer the query best.
+
+    The note's per-message vectors rank its messages (`sims`); the original text of the most promising ones is
+    split into sentences (at most `max_candidates`), which are embedded and scored against the query, so a detail buried in a longer
+    message is quoted itself and not the one-line summary of the message. A very short sentence brings its
+    neighbour along. One quote per message, in conversation order; [] when no original text is kept.
+    """
+    order = [int(i) for i in np.argsort(-sims)[:max_turns]]
+    texts = raw_fn(node, order)
+    cands: list[tuple[int, int, str]] = []        # (position of the message, sentence number, sentence)
+    per_turn: dict[int, list[str]] = {}
+    for pos in order:                                   # most promising message first
+        sents = split_sentences(texts.get(pos, ""))
+        if not sents or (cands and len(cands) + len(sents) > max_candidates):
+            continue
+        per_turn[pos] = sents
+        cands += [(pos, k, s) for k, s in enumerate(sents)]
+    if not cands:
+        return []
+    vecs = embed_many([c[2] for c in cands])
+    if vecs.shape[0] != len(cands) or vecs.shape[1] != qvec.shape[0]:
+        return []
+    scores = vecs @ qvec
+    best = float(scores.max())
+    if best <= 0.0:
+        return []
+    ranked = [i for i in np.argsort(-scores) if scores[i] >= min_ratio * best][:max_sentences]
+
+    chosen: dict[int, set[int]] = {}
+    for i in ranked:
+        pos, k, sent = cands[i]
+        picks = chosen.setdefault(pos, set())
+        picks.add(k)
+        if len(sent.split()) < short_words:      # "Yes, that one." means little alone
+            sents = per_turn[pos]
+            picks.add(k + 1 if k + 1 < len(sents) else max(k - 1, 0))
+    return [" ".join(per_turn[pos][k] for k in sorted(chosen[pos])) for pos in sorted(chosen)]
+
+
 def node_evidence(node: MemoryNode, qvec: np.ndarray, max_items: int = 4, min_ratio: float = 0.65,
-                  min_sim: float = 0.2) -> list[str]:
+                  min_sim: float = 0.2, raw_fn: RawFn | None = None,
+                  embed_many: EmbedManyFn | None = None) -> list[str]:
     """
     The messages in a node that match the query almost as well as its best one (in conversation order).
 
     Needed for answers spread over several messages (a list built up turn by turn): a summary tends to
-    drop some of the items, and one quote per topic only shows one of them.
+    drop some of the items, and one quote per topic only shows one of them. When the original text of the
+    messages is available (`raw_fn`), the quotes are the best-matching sentences from it instead of the
+    one-line summaries of the messages.
     """
     vecs = decode_turn_vecs(node.metadata)
     if vecs is None or vecs.shape[1] != qvec.shape[0] or len(vecs) == 0:
         return []
+    if raw_fn is not None and embed_many is not None:
+        quotes = sentence_evidence(node, qvec, vecs @ qvec, raw_fn, embed_many)
+        if quotes:
+            return quotes
     sims = vecs @ qvec
     best = float(sims.max())
     if best < min_sim:
@@ -136,9 +207,23 @@ class Retriever:
         self,
         embed_fn,              # Callable[[str], np.ndarray]
         config: CCEConfig = DEFAULT_CONFIG,
+        embed_many_fn=None,    # Callable[[list[str]], np.ndarray]; batch version, used for sentence evidence
     ):
         self.embed_fn = embed_fn
         self.config = config
+        self._embed_many = embed_many_fn
+        self._sentence_vecs: dict[str, np.ndarray] = {}
+
+    def embed_sentences(self, texts: list[str]) -> np.ndarray:
+        """Embed sentences for evidence, remembering recent ones (the same messages come up query after query)."""
+        missing = [t for t in dict.fromkeys(texts) if t not in self._sentence_vecs]
+        if missing:
+            if len(self._sentence_vecs) > 4096:
+                self._sentence_vecs.clear()
+            vecs = self._embed_many(missing) if self._embed_many else np.stack([self.embed_fn(t) for t in missing])
+            for t, v in zip(missing, vecs):
+                self._sentence_vecs[t] = np.asarray(v, dtype=np.float32)
+        return np.stack([self._sentence_vecs[t] for t in texts])
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -208,8 +293,11 @@ class Retriever:
 
         if is_overview_query(query):
             return results
+        raw_fn = getattr(store, "raw_texts", None)
         for r in results:
-            r.evidence = node_evidence(r.node, qvec)
+            r.evidence = node_evidence(
+                r.node, qvec, raw_fn=raw_fn, embed_many=self.embed_sentences if raw_fn else None
+            )
         store.warm.record_hits([r.node.node_id for r in results])
         return results
 

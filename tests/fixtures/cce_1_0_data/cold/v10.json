@@ -1,0 +1,15 @@
+{
+  "session_id": "v10",
+  "macro_text": "assistant: answer 0 about billing invoices stripe webhook plans with details billing invoices stripe webhook plans billing invoices stripe webhook plans\nuser: question 1 about billing invoices stripe webhook plans and more billing invoices stripe webhook plans. assistant: answer 1 about billing invoices stripe webhook plans with details billing invoices stripe webhook plans billing invoices stripe webhook plans\nuser: question 2 about billing invoices stripe webhook plans and more billing invoices stripe webhook plans. assistant: answer 2 about billing invoices stripe webhook plans with details billing invoices stripe webhook plans billing invoices stripe webhook plans\nuser: question 3 about billing invoices stripe webhook plans and more billing invoices stripe webhook plans. assistant: answer 3 about billing invoices stripe webhook plans with details billing invoices stripe webhook plans billing invoices stripe webhook plans\n\nuser: question 4 about hiking trails mountains boots weather and more hiking trails mountains boots weather. assistant: answer 4 about hiking trails mountains boots weather with details hiking trails mountains boots weather hiking trails mountains boots weather\nuser: question 5 about hiking trails mountains boots weather and more hiking trails mountains boots weather. assistant: answer 5 about hiking trails mountains boots weather with details hiking trails mountains boots weather hiking trails mountains boots weather\nuser: question 6 about hiking trails mountains boots weather and more hiking trails mountains boots weather. assistant: answer 6 about hiking trails mountains boots weather with details hiking trails mountains boots weather hiking trails mountains boots weather\nuser: question 7 about hiking trails mountains boots weather and more hiking trails mountains boots weather. assistant: answer 7 about hiking trails mountains boots weather with details hiking trails mountains boots weather hiking trails mountains boots weather",
+  "node_count": 2,
+  "turn_count": 16,
+  "token_count_original": 385,
+  "token_count_compressed": 387,
+  "topics": [
+    "billing \u00b7 invoices \u00b7 stripe",
+    "hiking \u00b7 trails \u00b7 mountains"
+  ],
+  "compression_ratio": 0.99,
+  "created_at": "2026-10-18T16:42:13.813882+00:00",
+  "metadata": {}
+}

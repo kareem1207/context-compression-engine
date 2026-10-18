@@ -369,7 +369,7 @@ class ContextBuilder:
             q = (q or "").strip()
             if q and q not in node.meso_summary and q not in seen:
                 seen.add(q)
-                lines.append(f"Relevant: {tokenizer.truncate_to_tokens(q, 45)}")
+                lines.append(f"Relevant: {tokenizer.truncate_to_tokens(q, 80)}")
 
         if include_micro and node.micro_summaries:
             for micro in node.micro_summaries:

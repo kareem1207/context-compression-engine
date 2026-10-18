@@ -54,7 +54,7 @@ class CCEEngine:
         self.chunker = SemanticChunker(config)
         self.summarizer = Summarizer(config)
         self.merger = Merger(config)
-        self.retriever = Retriever(embed_fn=self.chunker.embed_text, config=config)
+        self.retriever = Retriever(embed_fn=self.chunker.embed_text, config=config, embed_many_fn=self.chunker.embed_texts)
         self.context_builder = ContextBuilder(config)
 
     # ── Phase 1: Ingest ───────────────────────────────────────────────────────

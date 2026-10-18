@@ -5,7 +5,8 @@ Durable per-session state for live sessions, stored in the warm tier's SQLite fi
   turns         the turns that are not yet part of a memory note
                   state 'hot'     = the last N turns, injected verbatim
                   state 'pending' = evicted from the hot tier, waiting for topic-sized compression
-                (rows are deleted once their turns have been compressed into a note)
+                  state 'done'    = compressed into a note; the original text is kept (config.keep_raw_turns)
+                                    so retrieval can quote the exact sentence. Deleted with the session.
   session_meta  next turn index and counters per session
 
 Writes join the caller's transaction (WarmTier.transaction) so a turn and its counters, or a note
@@ -109,6 +110,39 @@ class TurnLog:
                 [(session_id, i) for i in indexes],
             )
             self._warm._commit()
+
+    def retire(self, session_id: str, indexes: list[int], keep: bool) -> None:
+        """Turns that are now part of a note: keep their text as 'done' rows, or drop them."""
+        if keep:
+            self.set_state(session_id, indexes, "done")
+        else:
+            self.delete(session_id, indexes)
+
+    def drop_done(self, session_id: str, start: int, end: int) -> None:
+        """Delete kept text of compressed turns in [start, end] (their note is gone)."""
+        with self._warm._lock:
+            self._conn.execute(
+                "DELETE FROM turns WHERE session_id = ? AND state = 'done' AND idx BETWEEN ? AND ?",
+                (session_id, start, end),
+            )
+            self._warm._commit()
+
+    def texts(self, session_id: str, indexes: list[int]) -> dict[int, str]:
+        """Original text of compressed (or any stored) turns, by turn index."""
+        if not indexes:
+            return {}
+        with self._warm._lock:
+            rows = self._conn.execute(
+                f"SELECT idx, content FROM turns WHERE session_id = ? AND idx IN ({','.join('?' * len(indexes))})",
+                [session_id, *indexes],
+            ).fetchall()
+        return {r["idx"]: r["content"] for r in rows}
+
+    def count(self, session_id: str, state: str) -> int:
+        with self._warm._lock:
+            return self._conn.execute(
+                "SELECT COUNT(*) FROM turns WHERE session_id = ? AND state = ?", (session_id, state)
+            ).fetchone()[0]
 
     def load(self, session_id: str, state: str) -> list[Turn]:
         with self._warm._lock:
