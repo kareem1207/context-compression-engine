@@ -1,6 +1,30 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 1.0.0 (2026-10-18)
+
+Fixes for live sessions, counting, limits and search, found while checking how MCP and REST users run CCE. Existing `.cce_data` folders from 0.1.x keep working; they are upgraded in place the first time they are opened.
+
+Live sessions (MCP, REST)
+- Evicted turns are compressed in topic-sized batches with the same chunker as one-shot mode, instead of one note per message. Turns waiting to be compressed are kept in a persisted pending buffer and sent verbatim, so there is no gap. Flushed on checkpoint, close and when the buffer gets big. New settings: `live_batch_turns`, `live_pending_max_turns`, `live_pending_max_tokens`.
+- State survives restarts and crashes: the hot tier, pending buffer and counters are saved in SQLite as messages arrive, and turn numbering continues instead of starting from 0 (which had broken the recency boost and overview ordering).
+- Database schema is versioned (`PRAGMA user_version`, now 4) with in-place migration from 0.1.x. The embedder (name, dimension, model) is recorded; opening a folder with a different embedder fails with a clear error.
+
+Counting and limits
+- Token counts: 400 Chinese characters or 400 characters of minified JSON used to count as 1 token. A character-aware estimate replaces the word count; exact `cl100k_base` counts are used when the optional `tokens` extra is installed and its vocabulary is already cached (nothing is downloaded). The context cap is now enforced for such text.
+- `warm_tier_max_chunks` and `cold_tier_max_summaries` are now enforced (they were documented but unused). Over the warm limit, the least-retrieved neighbouring old notes are merged into coarser ones; over the cold limit, the oldest summaries are dropped. `0` means unlimited.
+
+Search
+- One shared index per data folder (instead of one per store), kept current from SQLite so a second process sees new notes; scoring a query runs no SQL per note.
+
+Security and packaging
+- Session ids are validated everywhere (MCP, REST, library, cold tier): an id such as `../../x` could write a file outside the data folder.
+- REST CORS allows the `Authorization` and `X-API-Key` headers.
+- `cce_ui` is in the wheel, with a `cce-ui` command; `cce-rest` and `cce-mcp` answer `--help`; `mcp` is limited to `<2` (mcp 2.x broke a clean install of `cce-mcp`); the unused `pyvis` extra is gone. CI builds the wheel and smoke-tests it in a clean venv.
+
+Docs
+- README: roadmap and status updated, and a section on what the benchmarks do and do not show (they predate the live-session fix and have not been re-run).
+
+## 0.1.0 (2026-10-12)
 
 First public version.
 
