@@ -314,9 +314,7 @@ class MemoryStore:
         warm_count = self.warm.count(self.session_id)
         hot_count = self.hot.size()
         cold_exists = self.cold.exists(self.session_id)
-        warm_tokens = sum(
-            n.token_count for n in self.warm.get_by_session(self.session_id)
-        )
+        warm_tokens = self.warm.token_sum(self.session_id)
         return {
             "session_id": self.session_id,
             "turns_ingested": self._turn_count,
