@@ -10,6 +10,8 @@ Phases are wired in progressively:
 
 from __future__ import annotations
 
+import json
+
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
 from cce_core.ingestion.segmenter import Turn, segment, segment_incremental
 from cce_core.compression.chunker import Chunk, SemanticChunker
@@ -20,6 +22,19 @@ from cce_core.retrieval.retriever import Retriever, RetrievalResult
 from cce_core.retrieval.context_builder import ContextBuilder, ContextPayload
 from cce_core.session.manager import SessionManager
 from cce_core.session.stateless import StatelessProcessor, StatelessResult
+
+
+class EmbedderMismatchError(ValueError):
+    """The data folder was created with a different embedder than the one that is active now."""
+
+
+_EMBEDDER_HINT = (
+    "Set CCE_EMBEDDER (and CCE_DATA_DIR) to match the folder, or use a new data folder for the new embedder."
+)
+
+
+def _describe(identity: dict) -> str:
+    return f"{identity.get('model') or identity['name']!r} ({identity['dim']} dimensions)"
 
 
 class CCEEngine:
@@ -163,6 +178,39 @@ class CCEEngine:
 
     # ── Phase 2: Memory store ─────────────────────────────────────────────────
 
+    def embedder_identity(self) -> dict:
+        """What the active embedder is: notes made with one cannot be searched with another."""
+        model = self.chunker.model
+        identity = {"name": getattr(model, "name", "neural"), "dim": int(model.dim)}
+        if identity["name"] == "neural":
+            identity["model"] = self.config.embedding_model
+        return identity
+
+    def _check_embedder(self, store: MemoryStore) -> None:
+        """
+        Record the embedder in the database the first time, and refuse to open it with a different one.
+        (Notes hold no raw text, so they cannot be re-embedded; the way out is the original embedder
+        or a new data folder.)
+        """
+        active = self.embedder_identity()
+        stored = store.warm.get_meta("embedder")
+        if stored is None:
+            dim = store.warm.stored_embedding_dim()
+            if dim is not None and dim != active["dim"]:
+                # a 0.1.x folder: it has notes but no record of how they were made
+                raise EmbedderMismatchError(
+                    f"{self.config.db_path} holds {dim}-dimension embeddings, but the active embedder "
+                    f"({active['name']}) produces {active['dim']} dimensions. {_EMBEDDER_HINT}"
+                )
+            stored = store.warm.set_meta_if_absent("embedder", json.dumps(active, sort_keys=True))
+        recorded = json.loads(stored)
+        if recorded != active:
+            raise EmbedderMismatchError(
+                f"{self.config.db_path} was created with embedder {_describe(recorded)}, but the active embedder "
+                f"is {_describe(active)} (the vectors have {recorded['dim']} vs {active['dim']} dimensions "
+                f"or come from another model). {_EMBEDDER_HINT}"
+            )
+
     def open_session(self, session_id: str) -> MemoryStore:
         """
         Open a stateful MemoryStore for a session.
@@ -175,12 +223,18 @@ class CCEEngine:
             store.checkpoint(macro_text)
             store.close()
         """
-        return MemoryStore(
+        store = MemoryStore(
             session_id=session_id,
             config=self.config,
             compress_fn=self.compress_incremental,
             live_compress_fn=self.compress_live,
         )
+        try:
+            self._check_embedder(store)
+        except BaseException:
+            store.close()
+            raise
+        return store
 
     def full_pipeline(
         self,

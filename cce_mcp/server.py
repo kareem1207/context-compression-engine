@@ -451,8 +451,18 @@ async def cce_stateless_compress(params: StatelessCompressInput, ctx: Context) -
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     """Console entry point: `cce-mcp`."""
+    import argparse
+
+    argparse.ArgumentParser(
+        prog="cce-mcp",
+        description="Run the CCE MCP server on stdio. Point an MCP client (Claude Desktop, ...) at this command.",
+        epilog=(
+            "Settings come from environment variables: CCE_DATA_DIR, CCE_EMBEDDER, CCE_SUMMARIZER_MODE, "
+            "CCE_HOT_TIER_TURNS, CCE_TOP_K, CCE_MAX_TOKENS, CCE_LLM_ENDPOINT, CCE_LLM_MODEL."
+        ),
+    ).parse_args(argv)
     mcp.run()  # stdio transport, the default for local MCP tools
 
 

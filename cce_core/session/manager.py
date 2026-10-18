@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
+from cce_core.ids import validate_session_id
 from cce_core.memory.store import MemoryStore
 from cce_core.ingestion.segmenter import Turn, segment, segment_incremental
 
@@ -72,6 +73,7 @@ class SessionManager:
         via the WarmTier (SQLite persists between runs).
         Returns the MemoryStore for this session.
         """
+        validate_session_id(session_id)
         with self._lock:
             if session_id in self._sessions:
                 return self._sessions[session_id]
@@ -276,6 +278,7 @@ class SessionManager:
         Permanently delete a session — closes it, removes warm + cold data.
         WARNING: irreversible.
         """
+        validate_session_id(session_id)
         self.close(session_id, checkpoint=False)
         store = MemoryStore(session_id, self.config)
         store.warm.delete_session(session_id)
