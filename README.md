@@ -210,8 +210,8 @@ All tunables live in [`cce_core/config.py`](https://github.com/kareem1207/contex
 | `chunk_similarity_threshold` | `0.45` | cosine similarity below this starts a new topic |
 | `chunk_min_turns` / `chunk_max_turns` | `2` / `20` | chunk size bounds |
 | `hot_tier_max_turns` | `10` | recent turns kept verbatim |
-| `warm_tier_max_chunks` | `500` | topic chunks kept in SQLite |
-| `cold_tier_max_summaries` | `1000` | session summaries kept on disk |
+| `warm_tier_max_chunks` | `500` | topic notes kept per session. Over the limit, the least-retrieved neighbouring old notes are merged into coarser notes (the newest are left alone, nothing is deleted). `0` = unlimited |
+| `cold_tier_max_summaries` | `1000` | session summaries kept on disk; the oldest are deleted beyond this. `0` = unlimited |
 | `live_batch_turns` | `8` | live sessions: compress evicted turns once this many are waiting, in topic-sized notes (`1` = each eviction on its own) |
 | `live_pending_max_turns` / `live_pending_max_tokens` | `24` / `3000` | live sessions: flush the waiting turns even if the last topic is still going |
 | `retrieval_top_k` | `5` | nodes retrieved per query |
@@ -257,6 +257,7 @@ cd cce_sdk_js && npm test                            # JavaScript: client and of
 - **Compression only kicks in once a topic is longer than the summary budget** (`meso_max_tokens`). Short topics are kept as they are.
 - **The extractive summariser picks sentences; it does not paraphrase.** Use `llm` mode for more fluent summaries when a model is available.
 - **Live sessions keep their state in the same SQLite file.** The last `hot_tier_max_turns` turns, the turns waiting to be compressed, and the turn counters are saved as messages arrive, so a restart or crash picks up where it stopped. Waiting turns are sent to the model verbatim until they are compressed, so nothing falls in a gap. Compressed turns are not kept as raw text.
+- **Token counts are estimates.** Offline, CCE estimates from words and characters (CJK text, code and JSON count higher than plain English). With the optional `tokens` extra (`tiktoken`) and its vocabulary already cached, counts are exact for `cl100k_base`; CCE never downloads it. Other models tokenize differently. `context_max_tokens` is a cap on this estimate.
 - **Databases are versioned** (`PRAGMA user_version`). A 0.1.x `.cce_data` folder is upgraded in place the first time it is opened; its notes are kept.
 - **SQLite is accessed with a lock** (single writer, many readers): fine for local use, not a multi-server deployment.
 - Compression ratio is reported per run by `engine.compression_stats(...)`. There is no published benchmark yet.

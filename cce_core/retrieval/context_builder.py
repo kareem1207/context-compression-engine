@@ -30,7 +30,7 @@ Output formats:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal
 
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
@@ -205,11 +205,14 @@ class ContextBuilder:
             ContextPayload ready to export.
         """
         budget = max_tokens or self.config.context_max_tokens
+        budget -= max(16, budget // 32)   # counting the whole text at once can differ a little from counting its parts
 
         # Reserve tokens for: system note + recent turns + overhead
         system_tokens = tokenizer.count(system_note)
+        overhead = 80  # headers, separators, line breaks between blocks
+        # The cap is hard: if the recent turns alone do not fit, the oldest are shortened or dropped.
+        hot_turns, recent_cut = self._fit_recent(hot_turns, budget - system_tokens - overhead)
         recent_tokens = sum(tokenizer.count(t.content) + 4 for t in hot_turns)
-        overhead = 50  # headers, separators
         past_budget = budget - system_tokens - recent_tokens - overhead
 
         # Pending turns come first: they are the only copy of that part of the conversation.
@@ -233,7 +236,7 @@ class ContextBuilder:
             system_note=system_note,
             token_count=total_tokens,
             retrieved_node_ids=included_ids,
-            was_truncated=was_truncated or pending_cut,
+            was_truncated=was_truncated or pending_cut or recent_cut,
             pending_turns=pending,
         )
 
@@ -261,19 +264,27 @@ class ContextBuilder:
         Build a payload with no past context — just recent turns (and pending ones, if any).
         Used when the warm tier is empty (brand new session).
         """
-        if pending_turns:
-            return self.build([], hot_turns, pending_turns=pending_turns, pending_rank_fn=pending_rank_fn)
-        recent_tokens = sum(tokenizer.count(t.content) + 4 for t in hot_turns)
-        return ContextPayload(
-            past_blocks=[],
-            recent_turns=hot_turns,
-            system_note=_SYSTEM_NOTE,
-            token_count=recent_tokens,
-            retrieved_node_ids=[],
-            was_truncated=False,
-        )
+        return self.build([], hot_turns, pending_turns=pending_turns, pending_rank_fn=pending_rank_fn)
 
     # ── Internal ──────────────────────────────────────────────────────────────
+
+    def _fit_recent(self, turns: list[Turn], budget: int) -> tuple[list[Turn], bool]:
+        """Keep the newest turns that fit in `budget` tokens; shorten the first one that does not."""
+        kept: list[Turn] = []
+        left = budget
+        cut = False
+        for t in reversed(turns):
+            cost = tokenizer.count(t.content) + 4
+            if cost <= left:
+                kept.append(t)
+                left -= cost
+                continue
+            cut = True
+            if left > 24:
+                kept.append(replace(t, content=tokenizer.truncate_to_tokens(t.content, left - 4)))
+            break
+        kept.reverse()
+        return kept, cut
 
     def _pack_pending(
         self,
@@ -314,7 +325,7 @@ class ContextBuilder:
 
         for result in results:
             block = self._format_block(result, include_micro)
-            block_tokens = tokenizer.count(block)
+            block_tokens = tokenizer.count(block) + 2   # + the line break that joins it to the next
 
             if used_tokens + block_tokens > budget:
                 # Try truncating the block to fit remaining budget
