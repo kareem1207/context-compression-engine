@@ -6,7 +6,7 @@ It runs fully offline by default (no LLM is needed to compress) and plugs into a
 
 **[Try the live demo in your browser](https://kareem1207.github.io/context-compression-engine/)**: paste a conversation, see it split into topics, ask a question and compare the context a model would receive with the full history.
 
-> **Status: working prototype (v0.1).** The core engine, memory tiers, retrieval, sessions, MCP server, REST API, JavaScript client and a live dashboard are implemented and tested. Benchmarks are in [`benchmarks/`](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md). On local models, CCE found facts said long ago with about 90% fewer tokens than resending the chat, and far more often than sending the newest messages that fit. **But a plain search over raw messages does just as well**: CCE tied it on single facts, lists, corrections and "what did we talk about?" questions, and lost to it on lists and overviews until we fixed that. So treat CCE as a convenient, packaged memory layer (sessions, tiers, MCP, REST, JS client), not as better retrieval than ordinary search. Read the limits before relying on it.
+> **Status: v1.0.** The core engine, memory tiers, retrieval, sessions, MCP server, REST API, JavaScript client and a live dashboard are implemented and tested. Benchmarks are in [`benchmarks/`](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md). On local models, CCE found facts said long ago with about 90% fewer tokens than resending the chat, and far more often than sending the newest messages that fit. **But a plain search over raw messages does just as well**: CCE tied it on single facts, lists, corrections and "what did we talk about?" questions, and lost to it on lists and overviews until we fixed that. So treat CCE as a convenient, packaged memory layer (sessions, tiers, MCP, REST, JS client), not as better retrieval than ordinary search. Read the limits before relying on it.
 
 ---
 
@@ -252,6 +252,17 @@ cd cce_sdk_js && npm test                            # JavaScript: client and of
 
 `tests/test_e2e_gemma.py` needs a running llama.cpp server, so CI skips it. The first Python run downloads the embedding model.
 
+## What the results do and do not show
+
+- **Live sessions and one-shot mode.** "Live sessions" (the MCP server and the REST sessions) and "one-shot" mode (`/v1/compress`, `full_pipeline`) use the same compression. Before 1.0, live sessions did not group topics: every message that left the recent-turns window became a note of its own. The benchmarks in [`benchmarks/README.md`](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md) were produced with one-shot mode, and before that live-session fix. **They have not been re-run for 1.0.**
+- **Plain search is a strong baseline.** In our tests, a plain search over the raw messages matched CCE on finding single facts. What we measured in CCE's favour is token use, and results against two simpler ways of fitting a chat into a prompt: sending everything, and sending the newest messages that fit.
+- **What we claim**, each from the tables in the [benchmark write-up](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md):
+  - about 90% fewer tokens than resending the chat;
+  - on a 6.7B local model, 79% of questions correct with CCE against 42% when the whole chat was sent ([table](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md#chats-that-fit-the-models-window-about-5300-tokens-context-8192));
+  - on chats longer than the model's window, 75% to 100% correct with CCE against 4% to 6% with the newest messages that fit ([table](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md#chats-longer-than-the-window-about-9300-tokens-context-4096));
+  - it runs offline, and it is MIT licensed.
+- **What we do not claim.** Those are small tests (16 to 24 questions per cell) on two local models with planted facts, not a promise about your data or your model. Results depend on the conversation, the embedder and the model. See [what is not tested](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md#what-is-not-tested).
+
 ## Design notes and limits
 
 - **Search is brute-force cosine similarity over a NumPy matrix.** For the default warm-tier size (hundreds of chunks) this beats building an ANN index and keeps dependencies small. It is not meant for millions of chunks.
@@ -264,7 +275,7 @@ cd cce_sdk_js && npm test                            # JavaScript: client and of
 - **A data folder remembers its embedder.** The first time a folder is opened, the embedder (name and vector size) is recorded. Opening it later with a different one (`CCE_EMBEDDER`, `hash_dim`, another model) fails with a clear error instead of returning bad matches. Notes hold no raw text, so they cannot be re-embedded; use the original embedder or a new folder.
 - **Databases are versioned** (`PRAGMA user_version`). A 0.1.x `.cce_data` folder is upgraded in place the first time it is opened; its notes are kept.
 - **SQLite is accessed with a lock** (single writer, many readers): fine for local use, not a multi-server deployment.
-- Compression ratio is reported per run by `engine.compression_stats(...)`. There is no published benchmark yet.
+- Compression ratio is reported per run by `engine.compression_stats(...)`.
 
 ## Roadmap
 
@@ -274,7 +285,7 @@ cd cce_sdk_js && npm test                            # JavaScript: client and of
 - [ ] Test what plain retrieval cannot do: questions that need a summary of a whole topic or session
 - [ ] Benchmark on messy real conversations and with a hosted model
 - [ ] Better summaries: the default extractive summariser only picks sentences (a model-written option exists but is untested)
-- [ ] Publish to PyPI (`context-compression-engine`) and npm (`cce-client`)
+- [x] Published to PyPI (`context-compression-engine`) and npm (`cce-client`)
 - [ ] Optional ANN index for large warm tiers
 
 ## License

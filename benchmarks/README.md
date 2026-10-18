@@ -2,6 +2,8 @@
 
 **The honest summary.** CCE lets a small local model answer questions about things said long ago, using about 90% fewer tokens than resending the chat, and it beats "send everything" and "send the newest messages that fit". But **a plain search over the raw messages with the same token budget finds everything just as reliably**: in the model-free checks below CCE and plain search tie (96/96 facts, and 12/12 on each multi-message task). So these tests show that CCE's *retrieval* works; they do **not** show that its topic structure or summaries beat ordinary retrieval, and on overview questions ("what did we talk about?") it first did worse than plain search before a fix brought it level. On the one test that went against CCE (answers spread over several messages) it first lost badly, which we fixed; it now only ties. We have not tested the cases where summaries should matter (see [What is not tested](#what-is-not-tested)).
 
+**Version note.** These results were produced with one-shot mode (the whole conversation compressed in one call), before the 1.0 fix that makes live sessions (MCP, REST) group topics the same way. They have not been re-run for 1.0.
+
 All tests use local models through llama.cpp on a laptop CPU (AMD Ryzen 7 7730U, no GPU), temperature 0, thinking mode off.
 
 ## How the tests work
