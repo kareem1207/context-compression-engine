@@ -57,6 +57,13 @@ class CCEConfig:
     live_pending_max_turns: int = 24      # flush everything pending beyond this, even if the last topic is still open
     live_pending_max_tokens: int = 3000   # same, by size
 
+    # Keep the original text of compressed turns in the local SQLite file, so a retrieved topic can quote
+    # the exact sentence that answers a question instead of the one-line summary of the turn.
+    # False: compressed turns are dropped once they are summarised (CCE_KEEP_RAW_TURNS=0).
+    keep_raw_turns: bool = field(
+        default_factory=lambda: os.getenv("CCE_KEEP_RAW_TURNS", "1").strip().lower() not in ("0", "false", "no", "off")
+    )
+
     # ── Retrieval ─────────────────────────────────────────────────────────────
     retrieval_top_k: int = 5              # how many chunks to retrieve per query
     overview_max_topics: int = 12         # overview questions ("what did we cover?") show up to this many topics

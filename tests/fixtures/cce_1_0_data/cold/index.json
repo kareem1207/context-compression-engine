@@ -1,0 +1,13 @@
+{
+  "v10": {
+    "file": "v10.json",
+    "created_at": "2026-10-18T16:42:13.813882+00:00",
+    "node_count": 2,
+    "turn_count": 16,
+    "compression_ratio": 0.99,
+    "topics": [
+      "billing \u00b7 invoices \u00b7 stripe",
+      "hiking \u00b7 trails \u00b7 mountains"
+    ]
+  }
+}

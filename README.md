@@ -155,7 +155,7 @@ uv run python -m cce_rest.app        # http://localhost:9100  (interactive docs 
 | `POST /v1/sessions/{id}/messages` | add messages to a stored session |
 | `POST /v1/sessions/{id}/context` | get compressed context for a query |
 | `GET /v1/sessions/{id}/summary` | macro summary of the session |
-| `GET /v1/sessions/{id}/stats` | tier occupancy and token counts |
+| `GET /v1/sessions/{id}/stats` | tier occupancy and token counts (see [Session stats](#session-stats)) |
 | `POST /v1/sessions/{id}/close`, `DELETE /v1/sessions/{id}` | checkpoint and close, or delete |
 | `GET /v1/sessions`, `GET /health` | list sessions, health check |
 
@@ -215,6 +215,7 @@ All tunables live in [`cce_core/config.py`](https://github.com/kareem1207/contex
 | `cold_tier_max_summaries` | `1000` | session summaries kept on disk; the oldest are deleted beyond this. `0` = unlimited |
 | `live_batch_turns` | `8` | live sessions: compress evicted turns once this many are waiting, in topic-sized notes (`1` = each eviction on its own) |
 | `live_pending_max_turns` / `live_pending_max_tokens` | `24` / `3000` | live sessions: flush the waiting turns even if the last topic is still going |
+| `keep_raw_turns` | `true` | keep the original text of compressed turns in the local SQLite file so a topic can quote the exact sentence that answers a question (env `CCE_KEEP_RAW_TURNS=0` turns it off; see [Raw text and privacy](#raw-text-and-privacy)) |
 | `retrieval_top_k` | `5` | nodes retrieved per query |
 | `retrieval_recency_boost` | `0.2` | bonus for recent chunks |
 | `context_max_tokens` | `2048` | hard cap on the assembled context |
@@ -252,6 +253,19 @@ cd cce_sdk_js && npm test                            # JavaScript: client and of
 
 `tests/test_e2e_gemma.py` needs a running llama.cpp server, so CI skips it. The first Python run downloads the embedding model.
 
+## Raw text and privacy
+
+A topic note holds a summary and one short line per message, and a summary drops details: a fact in the third sentence of a long answer may not survive it. So, by default (`keep_raw_turns = true`), CCE also keeps the **original text of every compressed turn** in the `turns` table of the SQLite file `warm.db` in your data folder. When a topic matches a question, CCE scores the sentences of its best-matching messages against the question and quotes the best ones, instead of the one-line summary of the message. This is done at query time for a handful of messages per topic, and sentence vectors are remembered between queries.
+
+- **It stays on your machine.** The text is in `<data dir>/warm.db` (default `.cce_data/`), next to the notes that were already there. CCE sends it nowhere; it only reaches a model if it is quoted in a context you then send. The cold-tier JSON summaries are separate and hold no raw text.
+- **Turn it off** with `CCEConfig(keep_raw_turns=False)` or `CCE_KEEP_RAW_TURNS=0`. Turns are then dropped once summarised and quotes fall back to the one-line summaries (details inside longer messages can be lost). Turning it off does not remove text that was already stored.
+- **Delete it:** `DELETE /v1/sessions/{id}` (REST) or `SessionManager.delete(id)` removes a session's notes, its raw text and its summary. To remove everything, stop CCE and delete the data folder. Notes made by CCE 1.0 or earlier have no raw text and keep quoting summaries; the file is upgraded in place the first time it is opened.
+- The raw text adds roughly the size of the conversation to `warm.db`.
+
+## Session stats
+
+`GET /v1/sessions/{id}/stats` (and `cce_session_stats`) report, among others: `raw_tokens` (the whole session as it was said), `tokens_sent` (what sending the whole session would cost now: the notes as they are sent plus the hot and pending turns, verbatim), `tokens_saved` (`raw_tokens - tokens_sent`, never below 0) and `compression_ratio` (`raw_tokens / tokens_sent`). `compression_ratio` is `null` while the session is not smaller than its raw text, which is normal for short chats where everything is still verbatim. `warm_tokens_original` is the raw size of the turns the notes cover and `warm_tokens_compressed` the size of those notes as sent; `raw_turns_stored` counts the turns whose original text is kept.
+
 ## What the results do and do not show
 
 - **Live sessions and one-shot mode.** "Live sessions" (the MCP server and the REST sessions) and "one-shot" mode (`/v1/compress`, `full_pipeline`) use the same compression. Before 1.0, live sessions did not group topics: every message that left the recent-turns window became a note of its own. The benchmarks in [`benchmarks/README.md`](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md) were produced with one-shot mode, and before that live-session fix. **They have not been re-run for 1.0.**
@@ -269,7 +283,7 @@ cd cce_sdk_js && npm test                            # JavaScript: client and of
 - **One search index per data folder, shared by all sessions in the process.** It follows the SQLite file (`PRAGMA data_version` plus a change log), so rows written by another process show up without a restart. Scoring a query runs no SQL; only the winning notes are read from disk.
 - **Compression only kicks in once a topic is longer than the summary budget** (`meso_max_tokens`). Short topics are kept as they are.
 - **The extractive summariser picks sentences; it does not paraphrase.** Use `llm` mode for more fluent summaries when a model is available.
-- **Live sessions keep their state in the same SQLite file.** The last `hot_tier_max_turns` turns, the turns waiting to be compressed, and the turn counters are saved as messages arrive, so a restart or crash picks up where it stopped. Waiting turns are sent to the model verbatim until they are compressed, so nothing falls in a gap. Compressed turns are not kept as raw text.
+- **Live sessions keep their state in the same SQLite file.** The last `hot_tier_max_turns` turns, the turns waiting to be compressed, and the turn counters are saved as messages arrive, so a restart or crash picks up where it stopped. Waiting turns are sent to the model verbatim until they are compressed, so nothing falls in a gap. After compression, the original text of each turn stays in the same file unless you turn that off (`keep_raw_turns`, see [Raw text and privacy](#raw-text-and-privacy)).
 - **Token counts are estimates.** Offline, CCE estimates from words and characters (CJK text, code and JSON count higher than plain English). With the optional `tokens` extra (`tiktoken`) and its vocabulary already cached, counts are exact for `cl100k_base`; CCE never downloads it. Other models tokenize differently. `context_max_tokens` is a cap on this estimate.
 - **Session ids** are 1-64 characters of letters, digits, `_`, `.` and `-` (not `.`, `..` or `index`), in the library, the REST API and the MCP tools, because they become file names in the cold tier.
 - **A data folder remembers its embedder.** The first time a folder is opened, the embedder (name and vector size) is recorded. Opening it later with a different one (`CCE_EMBEDDER`, `hash_dim`, another model) fails with a clear error instead of returning bad matches. Notes hold no raw text, so they cannot be re-embedded; use the original embedder or a new folder.
