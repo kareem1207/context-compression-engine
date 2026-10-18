@@ -92,3 +92,27 @@ def test_api_key_is_enforced_when_configured(tmp_path, monkeypatch):
         assert c.post("/v1/compress", json=body, headers={"Authorization": "Bearer s3cret-key"}).status_code == 200
         assert c.post("/v1/compress", json=body, headers={"X-API-Key": "s3cret-key"}).status_code == 200
         assert c.get("/v1/sessions").status_code == 401
+
+
+def test_live_session_over_rest_groups_topics_and_survives_a_restart(tmp_path):
+    """Messages sent one request at a time are compressed by topic, and nothing is lost on restart."""
+    from tests.test_live_sessions import PLANTED, make_messages
+
+    cfg = CCEConfig(embedder="hash", base_dir=tmp_path / "data", hot_tier_max_turns=6, retrieval_top_k=3)
+    msgs = make_messages()
+    question = {"query": "How many invoice retry attempts are allowed?", "fmt": "string"}
+
+    with TestClient(create_app(cfg)) as c:
+        for m in msgs:
+            assert c.post("/v1/sessions/live/messages", json={"messages": [m]}).status_code == 201
+        stats = c.get("/v1/sessions/live/stats").json()
+        covered_by_notes = len(msgs) - stats["hot_turns"] - stats["pending_turns"]
+        assert 0 < stats["warm_nodes"] < covered_by_notes
+        assert PLANTED in c.post("/v1/sessions/live/context", json=question).json()["context"]
+
+    # New app on the same data dir = restart. The session is known again and keeps answering.
+    with TestClient(create_app(cfg)) as c:
+        assert c.get("/v1/sessions/live/stats").json()["turns_ingested"] == len(msgs)
+        assert PLANTED in c.post("/v1/sessions/live/context", json=question).json()["context"]
+        c.post("/v1/sessions/live/messages", json={"messages": [{"role": "user", "content": "one more"}]})
+        assert c.get("/v1/sessions/live/stats").json()["turns_ingested"] == len(msgs) + 1

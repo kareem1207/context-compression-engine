@@ -6,7 +6,7 @@ It hides the hot/warm/cold split entirely.
 
 Responsibilities:
   1. Route new turns → hot tier
-  2. Detect hot tier evictions → trigger compression → push to warm tier
+  2. Evicted turns wait in a pending buffer → topic-sized compression → warm tier
   3. Provide unified search across warm tier (hot tier is always included verbatim)
   4. Manage session lifecycle: open, checkpoint, close (cold tier write)
   5. Expose a clean retrieve(query) API that returns a ready-to-use context payload
@@ -18,8 +18,8 @@ or use the SessionManager (Phase 4) which handles this automatically.
 
 from __future__ import annotations
 
+import threading
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -29,9 +29,6 @@ from cce_core.compression.merger import MemoryNode
 from cce_core.memory.hot_tier import HotTier
 from cce_core.memory.warm_tier import WarmTier
 from cce_core.memory.cold_tier import ColdTier, MacroSummary
-
-if TYPE_CHECKING:
-    pass
 
 
 class MemoryStore:
@@ -45,84 +42,186 @@ class MemoryStore:
         store.checkpoint()                    # saves cold tier summary
         store.close()                         # flushes and closes DB
 
-    The store auto-compresses evicted hot tier turns into warm tier nodes
-    using the provided compress_fn callback (injected by CCEEngine).
+    Turns that fall out of the hot tier go to a pending buffer. When the store has a
+    `live_compress_fn` (the engine provides one) they are compressed in topic-sized
+    batches once `config.live_batch_turns` are waiting; the last, possibly still open,
+    topic stays pending until it is closed, grows past a size limit, or the session is
+    flushed. With only a `compress_fn` every eviction is compressed at once.
+
+    The hot tier, the pending buffer and the counters are saved in the warm tier's
+    SQLite file as they change, so a restarted or crashed process picks up where it
+    stopped and turn indexes keep growing.
     """
 
     def __init__(
         self,
         session_id: str,
         config: CCEConfig = DEFAULT_CONFIG,
-        compress_fn=None,   # Callable[[list[Turn]], list[MemoryNode]]
+        compress_fn=None,        # Callable[[list[Turn], str], list[MemoryNode]]
+        live_compress_fn=None,   # Callable[[list[Turn], str, bool], tuple[list[MemoryNode], int]]
     ):
         self.session_id = session_id
         self.config = config
         self.compress_fn = compress_fn  # injected from CCEEngine
+        self.live_compress_fn = live_compress_fn
 
         self.hot = HotTier(config)
         self.warm = WarmTier(config)
         self.cold = ColdTier(config)
 
+        self._lock = threading.RLock()
+        self._log = self.warm.turn_log
+        self._pending: list[Turn] = []
+        self._next_index = 0
         self._turn_count = 0
         self._raw_token_count = 0
+        self._retry_at = 0   # pending size at which a topic-batch attempt is worth repeating
         self._opened_at = datetime.now(timezone.utc)
+        self._restore()
+
+    # ── Saved state ───────────────────────────────────────────────────────────
+
+    def _restore(self) -> None:
+        """Rebuild the hot tier, pending buffer and counters from the warm tier's database."""
+        sid = self.session_id
+        meta = self._log.load_meta(sid)
+        if meta:
+            self._next_index = meta["next_index"]
+            self._turn_count = meta["turn_count"]
+            self._raw_token_count = meta["raw_tokens"]
+        hot = self._log.load(sid, "hot")
+        pending = self._log.load(sid, "pending")
+        cap = self.config.hot_tier_max_turns
+        if len(hot) > cap:   # the hot tier was made smaller since the last run
+            overflow, hot = hot[:-cap], hot[-cap:]
+            with self.warm.transaction():
+                self._log.set_state(sid, [t.index for t in overflow], "pending")
+            pending = sorted(pending + overflow, key=lambda t: t.index)
+        self.hot.restore(hot)
+        self._pending = pending
+        stored = [t.index + 1 for t in hot + pending]
+        if stored:
+            self._next_index = max(self._next_index, *stored)
+
+    @property
+    def next_index(self) -> int:
+        """Index the next turn of this session should get."""
+        return self._next_index
+
+    def get_pending_turns(self) -> list[Turn]:
+        """Turns that left the hot tier but are not in a memory note yet (oldest first)."""
+        with self._lock:
+            return list(self._pending)
 
     # ── Ingest ────────────────────────────────────────────────────────────────
 
-    def ingest_turn(self, turn: Turn) -> list[MemoryNode]:
+    def ingest_turn(self, turn: Turn, compress: bool = True) -> list[MemoryNode]:
         """
         Add a new turn to the store.
-        If the hot tier evicts a turn, compress it and push to warm tier.
-        Returns any new MemoryNodes created (empty list if no eviction).
+        A turn pushed out of the hot tier joins the pending buffer; once enough are pending
+        they are compressed into warm tier nodes (see the class docstring).
+        Returns any new MemoryNodes created (empty list if none).
         """
-        self._turn_count += 1
-        self._raw_token_count += turn.token_count
+        return self.ingest_turns([turn], compress=compress)
 
-        evicted = self.hot.push(turn)
-        new_nodes: list[MemoryNode] = []
+    def ingest_turns(self, turns: list[Turn], compress: bool = True) -> list[MemoryNode]:
+        """Add several turns in one transaction. Compression runs once, after all of them."""
+        if not turns:
+            return []
+        with self._lock:
+            self._push(turns, count=True)
+            return self.compress_pending() if compress else []
 
-        if evicted and self.compress_fn:
-            # Collect all pending evictions (could be more if push_many was called)
-            pending = self.hot.drain_evicted()
-            if pending:
-                nodes = self.compress_fn(pending, self.session_id)
-                for node in nodes:
-                    self.warm.upsert(node)
-                new_nodes.extend(nodes)
+    def seed_hot(self, turns: list[Turn]) -> None:
+        """Put already-counted turns into the hot tier (used after a one-shot pipeline run)."""
+        with self._lock:
+            self._push(turns, count=False)
 
-        return new_nodes
+    def _push(self, turns: list[Turn], count: bool) -> None:
+        sid = self.session_id
+        with self.warm.transaction():
+            self._log.put(sid, turns, "hot")
+            for turn in turns:
+                self.hot.push(turn)
+            evicted = self.hot.drain_evicted()
+            self._log.set_state(sid, [t.index for t in evicted], "pending")
+            nxt = max(t.index for t in turns) + 1
+            self._log.bump_meta(
+                sid,
+                turns=len(turns) if count else 0,
+                tokens=sum(t.token_count for t in turns) if count else 0,
+                next_index=nxt,
+            )
+        self._pending.extend(evicted)
+        self._next_index = max(self._next_index, nxt)
+        if count:
+            self._turn_count += len(turns)
+            self._raw_token_count += sum(t.token_count for t in turns)
 
-    def ingest_turns(self, turns: list[Turn]) -> list[MemoryNode]:
+    # ── Compression of pending turns ──────────────────────────────────────────
+
+    def compress_pending(self, force: bool = False) -> list[MemoryNode]:
         """
-        Bulk ingest a list of turns.
-        Evictions are batched and compressed together for efficiency.
+        Compress pending turns if a batch is due (or `force`). Returns the new nodes.
+        Turns that are not compressed stay pending and keep being served verbatim.
         """
-        self._turn_count += len(turns)
-        self._raw_token_count += sum(t.token_count for t in turns)
+        cfg = self.config
+        with self._lock:
+            pending = self._pending
+            if not pending or not (self.compress_fn or self.live_compress_fn):
+                return []
+            if self.live_compress_fn is None:
+                nodes, consumed = self.compress_fn(list(pending), self.session_id), len(pending)
+            else:
+                size = len(pending)
+                tokens = sum(t.token_count for t in pending)
+                must_flush = (
+                    force
+                    or cfg.live_batch_turns <= 1
+                    or size >= cfg.live_pending_max_turns
+                    or tokens >= cfg.live_pending_max_tokens
+                )
+                if not must_flush and (size < cfg.live_batch_turns or size < self._retry_at):
+                    return []
+                nodes, consumed = self.live_compress_fn(list(pending), self.session_id, must_flush)
+                if consumed == 0:
+                    # One topic still going: look again after a few more turns instead of every turn.
+                    self._retry_at = size + max(2, cfg.live_batch_turns // 2)
+                    return []
+            self._retry_at = 0
+            self.store_nodes(nodes, pending[:consumed])
+            return nodes
 
-        evicted_batch = self.hot.push_many(turns)
-        new_nodes: list[MemoryNode] = []
-
-        if evicted_batch and self.compress_fn:
-            nodes = self.compress_fn(evicted_batch, self.session_id)
-            self.warm.upsert_many(nodes)
-            new_nodes.extend(nodes)
-
-        return new_nodes
+    def store_nodes(self, nodes: list[MemoryNode], consumed: list[Turn]) -> None:
+        """Write nodes to the warm tier and drop the pending turns they replace, in one commit."""
+        with self._lock:
+            done = {t.index for t in consumed}
+            with self.warm.transaction():
+                self.warm.upsert_many(nodes)
+                self._log.delete(self.session_id, sorted(done))
+            self._pending = [t for t in self._pending if t.index not in done]
 
     def ingest_nodes(self, nodes: list[MemoryNode], turns: list | None = None) -> None:
         """
         Directly write pre-compressed MemoryNodes to warm tier.
         Optionally pass original turns to track raw token count correctly.
         """
-        if turns:
-            self._turn_count += len(turns)
-            self._raw_token_count += sum(t.token_count for t in turns)
-        else:
-            # Best-effort: reconstruct counts from node metadata
-            self._raw_token_count += sum(n.token_count for n in nodes)
-            self._turn_count += sum(n.turn_end - n.turn_start + 1 for n in nodes)
-        self.warm.upsert_many(nodes)
+        with self._lock:
+            if turns:
+                n_turns = len(turns)
+                n_tokens = sum(t.token_count for t in turns)
+                nxt = max(t.index for t in turns) + 1
+            else:
+                # Best-effort: reconstruct counts from node metadata
+                n_tokens = sum(n.token_count for n in nodes)
+                n_turns = sum(n.turn_end - n.turn_start + 1 for n in nodes)
+                nxt = max((n.turn_end + 1 for n in nodes), default=0)
+            with self.warm.transaction():
+                self.warm.upsert_many(nodes)
+                self._log.bump_meta(self.session_id, turns=n_turns, tokens=n_tokens, next_index=nxt)
+            self._turn_count += n_turns
+            self._raw_token_count += n_tokens
+            self._next_index = max(self._next_index, nxt)
 
     # ── Search ────────────────────────────────────────────────────────────────
 
@@ -186,16 +285,24 @@ class MemoryStore:
 
     def flush_hot_to_warm(self) -> list[MemoryNode]:
         """
-        Force-compress all remaining hot tier turns into warm tier.
-        Call before checkpoint() to ensure nothing is left uncompressed.
+        Force-compress everything still uncompressed (pending turns, then the hot tier) into
+        warm tier nodes and empty both. Call before checkpoint() so nothing is left behind.
         """
-        remaining = self.hot.get_all()
-        if not remaining or not self.compress_fn:
-            return []
-        nodes = self.compress_fn(remaining, self.session_id)
-        self.warm.upsert_many(nodes)
-        self.hot.clear()
-        return nodes
+        with self._lock:
+            remaining = self._pending + self.hot.get_all()
+            if not remaining or not (self.compress_fn or self.live_compress_fn):
+                return []
+            if self.live_compress_fn is not None:
+                nodes, _ = self.live_compress_fn(remaining, self.session_id, True)
+            else:
+                nodes = self.compress_fn(remaining, self.session_id)
+            with self.warm.transaction():
+                self.warm.upsert_many(nodes)
+                self._log.delete(self.session_id, [t.index for t in remaining])
+            self.hot.clear()
+            self._pending = []
+            self._retry_at = 0
+            return nodes
 
     def close(self):
         """Clean up DB connection."""
@@ -215,6 +322,7 @@ class MemoryStore:
             "turns_ingested": self._turn_count,
             "raw_tokens": self._raw_token_count,
             "hot_turns": hot_count,
+            "pending_turns": len(self._pending),
             "warm_nodes": warm_count,
             "warm_tokens_compressed": warm_tokens,
             "cold_summary_exists": cold_exists,
@@ -227,5 +335,6 @@ class MemoryStore:
     def __repr__(self):
         return (
             f"MemoryStore(session={self.session_id!r}, "
-            f"hot={self.hot.size()}, warm={self.warm.count(self.session_id)})"
+            f"hot={self.hot.size()}, pending={len(self._pending)}, "
+            f"warm={self.warm.count(self.session_id)})"
         )

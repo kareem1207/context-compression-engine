@@ -49,6 +49,14 @@ class CCEConfig:
     warm_tier_max_chunks: int = 500       # max topic chunks in SQLite
     cold_tier_max_summaries: int = 1000   # max macro summaries on disk
 
+    # ── Live sessions (MCP / REST) ────────────────────────────────────────────
+    # Turns that leave the hot tier wait in a persisted "pending" buffer and are compressed in
+    # topic-sized batches (the same chunker as one-shot mode). Pending turns stay available to
+    # retrieval, verbatim, until they are compressed. Everything left is flushed on checkpoint/close.
+    live_batch_turns: int = 8             # compress once this many turns are pending (<= 1: compress each eviction at once)
+    live_pending_max_turns: int = 24      # flush everything pending beyond this, even if the last topic is still open
+    live_pending_max_tokens: int = 3000   # same, by size
+
     # ── Retrieval ─────────────────────────────────────────────────────────────
     retrieval_top_k: int = 5              # how many chunks to retrieve per query
     overview_max_topics: int = 12         # overview questions ("what did we cover?") show up to this many topics

@@ -69,6 +69,12 @@ class HotTier:
                 evicted_batch.append(ev)
         return evicted_batch
 
+    def restore(self, turns: list[Turn]) -> None:
+        """Refill an empty buffer with saved turns (oldest first) without queueing evictions."""
+        with self._lock:
+            self._buffer.clear()
+            self._buffer.extend(turns[-self._buffer.maxlen:])
+
     # ── Read ──────────────────────────────────────────────────────────────────
 
     def get_all(self) -> list[Turn]:

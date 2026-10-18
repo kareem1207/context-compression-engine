@@ -212,6 +212,8 @@ All tunables live in [`cce_core/config.py`](https://github.com/kareem1207/contex
 | `hot_tier_max_turns` | `10` | recent turns kept verbatim |
 | `warm_tier_max_chunks` | `500` | topic chunks kept in SQLite |
 | `cold_tier_max_summaries` | `1000` | session summaries kept on disk |
+| `live_batch_turns` | `8` | live sessions: compress evicted turns once this many are waiting, in topic-sized notes (`1` = each eviction on its own) |
+| `live_pending_max_turns` / `live_pending_max_tokens` | `24` / `3000` | live sessions: flush the waiting turns even if the last topic is still going |
 | `retrieval_top_k` | `5` | nodes retrieved per query |
 | `retrieval_recency_boost` | `0.2` | bonus for recent chunks |
 | `context_max_tokens` | `2048` | hard cap on the assembled context |
@@ -254,6 +256,8 @@ cd cce_sdk_js && npm test                            # JavaScript: client and of
 - **Search is brute-force cosine similarity over a NumPy matrix.** For the default warm-tier size (hundreds of chunks) this beats building an ANN index and keeps dependencies small. It is not meant for millions of chunks.
 - **Compression only kicks in once a topic is longer than the summary budget** (`meso_max_tokens`). Short topics are kept as they are.
 - **The extractive summariser picks sentences; it does not paraphrase.** Use `llm` mode for more fluent summaries when a model is available.
+- **Live sessions keep their state in the same SQLite file.** The last `hot_tier_max_turns` turns, the turns waiting to be compressed, and the turn counters are saved as messages arrive, so a restart or crash picks up where it stopped. Waiting turns are sent to the model verbatim until they are compressed, so nothing falls in a gap. Compressed turns are not kept as raw text.
+- **Databases are versioned** (`PRAGMA user_version`). A 0.1.x `.cce_data` folder is upgraded in place the first time it is opened; its notes are kept.
 - **SQLite is accessed with a lock** (single writer, many readers): fine for local use, not a multi-server deployment.
 - Compression ratio is reported per run by `engine.compression_stats(...)`. There is no published benchmark yet.
 

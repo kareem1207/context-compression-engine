@@ -23,8 +23,10 @@ Thread safety:
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -60,6 +62,38 @@ CREATE INDEX IF NOT EXISTS idx_turn_start ON memory_nodes (turn_start);
 """
 
 
+# Database schema version, kept in PRAGMA user_version.
+#   0 = a 0.1.x database (memory_nodes only) or a brand-new file
+#   1 = adds the `turns` and `session_meta` tables (live-session state survives restarts)
+SCHEMA_VERSION = 1
+
+_CREATE_TURNS = """
+CREATE TABLE IF NOT EXISTS turns (
+    session_id   TEXT NOT NULL,
+    idx          INTEGER NOT NULL,
+    turn_id      TEXT NOT NULL,
+    role         TEXT NOT NULL,
+    content      TEXT NOT NULL,
+    token_count  INTEGER NOT NULL,
+    timestamp    TEXT NOT NULL,
+    state        TEXT NOT NULL,      -- 'hot' (recent, verbatim) | 'pending' (evicted, not yet compressed)
+    metadata     TEXT NOT NULL,      -- JSON object
+    PRIMARY KEY (session_id, idx)
+);
+"""
+
+_CREATE_SESSION_META = """
+CREATE TABLE IF NOT EXISTS session_meta (
+    session_id   TEXT PRIMARY KEY,
+    next_index   INTEGER NOT NULL,   -- index the next turn gets; only ever grows
+    turn_count   INTEGER NOT NULL,
+    raw_tokens   INTEGER NOT NULL
+);
+"""
+
+logger = logging.getLogger(__name__)
+
+
 def _emb_to_blob(emb: np.ndarray) -> bytes:
     return emb.astype(np.float32).tobytes()
 
@@ -83,9 +117,12 @@ class WarmTier:
         self.config = config
         config.ensure_dirs()
         self._db_path = str(config.db_path)
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
+        self._tx_depth = 0
         self._conn = self._connect()
         self._init_schema()
+        from cce_core.memory.turn_log import TurnLog
+        self.turn_log = TurnLog(self)
 
         # In-memory embedding matrix for fast ANN — rebuilt on load, kept in sync
         self._node_ids: list[str] = []
@@ -107,6 +144,64 @@ class WarmTier:
             self._conn.execute(_CREATE_TABLE)
             self._conn.execute(_CREATE_IDX_SESSION)
             self._conn.execute(_CREATE_IDX_TURN)
+            self._conn.commit()
+            self._migrate()
+
+    def _migrate(self):
+        """Bring the database up to SCHEMA_VERSION in place. Existing notes are kept."""
+        conn = self._conn
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        if version == SCHEMA_VERSION:
+            return
+        if version > SCHEMA_VERSION:
+            raise RuntimeError(
+                f"{self._db_path} has schema version {version}, newer than this CCE ({SCHEMA_VERSION}). "
+                "Upgrade context-compression-engine to open it."
+            )
+        conn.execute("BEGIN IMMEDIATE")   # another process may be migrating at the same time
+        try:
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            if version < 1:
+                conn.execute(_CREATE_TURNS)
+                conn.execute(_CREATE_SESSION_META)
+                # 0.1.x kept no per-session counters: continue numbering after the last note.
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO session_meta (session_id, next_index, turn_count, raw_tokens)
+                    SELECT session_id, MAX(turn_end) + 1, SUM(turn_end - turn_start + 1), SUM(token_count)
+                    FROM memory_nodes WHERE session_id IS NOT NULL GROUP BY session_id
+                    """
+                )
+                migrated = conn.execute("SELECT COUNT(*) FROM session_meta").fetchone()[0]
+                if migrated:
+                    logger.info("Migrated %s: %d session(s) upgraded to schema 1", self._db_path, migrated)
+            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+
+    @contextmanager
+    def transaction(self):
+        """Group writes (from this class and TurnLog) into one commit; rolled back on error."""
+        with self._lock:
+            self._tx_depth += 1
+            try:
+                yield
+            except BaseException:
+                if self._tx_depth == 1:
+                    self._conn.rollback()
+                    self._matrix_dirty = True
+                raise
+            else:
+                if self._tx_depth == 1:
+                    self._conn.commit()
+            finally:
+                self._tx_depth -= 1
+
+    def _commit(self):
+        """Commit now, unless inside transaction()."""
+        if self._tx_depth == 0:
             self._conn.commit()
 
     # ── Matrix management ─────────────────────────────────────────────────────
@@ -170,7 +265,7 @@ class WarmTier:
                     json.dumps(node.metadata),
                 ),
             )
-            self._conn.commit()
+            self._commit()
 
         # Keep matrix in sync without full reload
         if node.node_id not in self._node_ids:
@@ -204,7 +299,7 @@ class WarmTier:
                 """,
                 rows,
             )
-            self._conn.commit()
+            self._commit()
         self._matrix_dirty = True  # Rebuild on next search
 
     # ── Read ──────────────────────────────────────────────────────────────────
@@ -363,7 +458,7 @@ class WarmTier:
             cur = self._conn.execute(
                 "DELETE FROM memory_nodes WHERE node_id = ?", (node_id,)
             )
-            self._conn.commit()
+            self._commit()
         if cur.rowcount > 0:
             self._matrix_dirty = True
             return True
@@ -375,7 +470,9 @@ class WarmTier:
             cur = self._conn.execute(
                 "DELETE FROM memory_nodes WHERE session_id = ?", (session_id,)
             )
-            self._conn.commit()
+            self._conn.execute("DELETE FROM turns WHERE session_id = ?", (session_id,))
+            self._conn.execute("DELETE FROM session_meta WHERE session_id = ?", (session_id,))
+            self._commit()
         if cur.rowcount > 0:
             self._matrix_dirty = True
         return cur.rowcount
