@@ -19,7 +19,7 @@ class FakeCtx:
     """The part of mcp's Context that the tools use."""
 
     def __init__(self, engine, manager):
-        self.request_context = SimpleNamespace(lifespan_state={"engine": engine, "manager": manager})
+        self.request_context = SimpleNamespace(lifespan_context={"engine": engine, "manager": manager})
 
     async def report_progress(self, *args, **kwargs):
         return None

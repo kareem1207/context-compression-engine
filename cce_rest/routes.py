@@ -37,6 +37,7 @@ class AddMessagesIn(BaseModel):
 
 
 class ContextIn(BaseModel):
+    explain: bool = False
     query: str = Field(..., min_length=1, max_length=4000)
     top_k: Optional[int] = Field(default=None, ge=1, le=50)
     fmt: Fmt = "messages"
@@ -92,15 +93,20 @@ def add_messages(session_id: str, body: AddMessagesIn, request: Request):
 
 
 @secured.post("/v1/sessions/{session_id}/context", tags=["sessions"])
-def get_context(session_id: str, body: ContextIn, request: Request):
+def get_context(session_id: str, body: ContextIn, request: Request, explain: bool = False):
+    """Context for a query. `?explain=1` (or `"explain": true`) adds which notes and sentences were chosen,
+    their scores (dense, recency, BM25), the token budget split and what was dropped."""
     _require(request, session_id)
     payload = _manager(request).build_context_payload(session_id, body.query, top_k=body.top_k)
-    return {
+    out = {
         "context": payload.export(body.fmt),
         "token_count": payload.token_count,
         "was_truncated": payload.was_truncated,
         "retrieved_node_ids": payload.retrieved_node_ids,
     }
+    if explain or body.explain:
+        out["explain"] = payload.explain
+    return out
 
 
 @secured.get("/v1/sessions/{session_id}/summary", tags=["sessions"])

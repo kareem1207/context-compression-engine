@@ -1,0 +1,11 @@
+{
+  "servers": {
+    "cce": {
+      "type": "stdio",
+      "command": "cce-mcp",
+      "env": {
+        "CCE_DATA_DIR": "${userHome}/cce-memory"
+      }
+    }
+  }
+}

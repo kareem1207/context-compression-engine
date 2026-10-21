@@ -76,10 +76,10 @@ mcp = FastMCP("cce_mcp", lifespan=cce_lifespan)
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_manager(ctx: Context) -> SessionManager:
-    return ctx.request_context.lifespan_state["manager"]
+    return ctx.request_context.lifespan_context["manager"]
 
 def _get_processor(ctx: Context) -> StatelessProcessor:
-    return ctx.request_context.lifespan_state["processor"]
+    return ctx.request_context.lifespan_context["processor"]
 
 def _ok(data: Any) -> str:
     return json.dumps({"status": "ok", **data} if isinstance(data, dict) else {"status": "ok", "result": data}, indent=2)
@@ -232,6 +232,7 @@ async def cce_retrieve_context(params: RetrieveContextInput, ctx: Context) -> st
             "recent_turns": len(payload.recent_turns),
             "was_truncated": payload.was_truncated,
             "retrieved_node_ids": payload.retrieved_node_ids,
+            **({"explain": payload.explain} if params.explain else {}),
         })
     except Exception as e:
         return _err(f"Failed to retrieve context: {e}")
@@ -274,7 +275,7 @@ async def cce_summarize_session(params: SummarizeSessionInput, ctx: Context) -> 
                 "node_count": 0,
             })
 
-        engine: CCEEngine = ctx.request_context.lifespan_state["engine"]
+        engine: CCEEngine = ctx.request_context.lifespan_context["engine"]
         macro = engine.macro_summary(nodes)
 
         return _ok({

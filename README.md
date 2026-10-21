@@ -186,6 +186,30 @@ console.log(out.stats.savedPercent, out.payload.toMessages());
 
 Install it with `npm install cce-client`. **CCE Lite** swaps the neural sentence model for a lightweight word-hashing embedder, so it needs no downloads but is less semantic than the Python engine.
 
+### Use it with other tools
+
+Each of these has a runnable example in [`examples/integrations/`](https://github.com/kareem1207/context-compression-engine/tree/main/examples/integrations).
+
+| You use | Do this |
+|---|---|
+| Claude Desktop, Cursor, VS Code (MCP) | install `context-compression-engine[mcp]`, then copy `claude_desktop_config.json`, `cursor_mcp.json` or `vscode_mcp.json` from the examples folder into the tool's MCP settings (`command` is `cce-mcp`, set `CCE_DATA_DIR` to where memory should live) |
+| Anything that speaks the OpenAI chat API | run `cce-proxy --upstream <model server base URL>` (extra `rest`) and change your client's base URL to `http://127.0.0.1:9200/v1`. Long histories are trimmed to the relevant notes plus the recent turns; short ones pass through. Send `X-CCE-Session: <id>` (else the `user` field, else a hash of the first message). Streaming works. Requests with tool calls, tool messages or images are forwarded unchanged. |
+| LangChain | `from cce_integrations.langchain import CCEChatMessageHistory` (needs `langchain-core`); use it with `RunnableWithMessageHistory`. `.messages` is the older notes that match the latest user message plus the recent turns; `.search(query)` for another question |
+| LlamaIndex | `from cce_integrations.llamaindex import CCEChatMemory` (needs `llama-index-core`); `CCEChatMemory.from_defaults(session_id=..., data_dir=...)` goes wherever a `memory=` is accepted |
+| TypeScript / JavaScript | `cce_sdk_js` ships type definitions for the REST client and the offline engine (`CCEClient.getContext(..., { explain: true })`, `SessionStats`, `Explain`) |
+
+The LangChain and LlamaIndex classes were checked against langchain-core 1.6.12 and llama-index-core 0.14.25 (2026-10-21). LangChain now recommends LangGraph persistence over `RunnableWithMessageHistory`; `CCEChatMessageHistory` is a standard `BaseChatMessageHistory`, so it works with either.
+
+### See why something was retrieved
+
+`POST /v1/sessions/{id}/context?explain=1` (or `"explain": true`, or `explain=true` on the `cce_retrieve_context` MCP tool) returns, next to the context, which notes and quotes were chosen, their scores (dense, recency, BM25, fused), the token budget split (system note, recent turns, pending turns, notes, overhead) and the notes that were retrieved but dropped to fit. From a terminal:
+
+```bash
+cce inspect                                   # sessions in the data folder
+cce inspect my-session                        # its notes
+cce inspect my-session --query "what is the retry limit?"   # why that question gets that context (add --json)
+```
+
 ### See it work
 
 ```bash
