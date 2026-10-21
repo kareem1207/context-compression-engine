@@ -20,6 +20,7 @@ import json
 import sqlite3
 import threading
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -60,11 +61,13 @@ class _Block:
         self.tvecs = np.empty((16, dim), dtype=np.float32)
         self.s_off = np.empty(16, dtype=np.int64)      # same for the sentence vectors of the long messages
         self.s_len = np.empty(16, dtype=np.int64)
+        self.t0 = np.empty(16, dtype=np.float64)       # when the note's first / last message was said (epoch s; NaN: unknown)
+        self.t1 = np.empty(16, dtype=np.float64)
         self.sn = 0
         self.svecs = np.empty((16, dim), dtype=np.float32)
         self.bm25 = Bm25()
 
-    def append(self, node_id, emb, turn_start, turn_end, kw, tv, sv=None, tf=None):
+    def append(self, node_id, emb, turn_start, turn_end, kw, tv, sv=None, tf=None, span=(float('nan'), float('nan'))):
         i = self.n
         self.vecs = _grow(self.vecs, i, i + 1)
         self.turn_start = _grow(self.turn_start, i, i + 1)
@@ -73,6 +76,9 @@ class _Block:
         self.t_len = _grow(self.t_len, i, i + 1)
         self.s_off = _grow(self.s_off, i, i + 1)
         self.s_len = _grow(self.s_len, i, i + 1)
+        self.t0 = _grow(self.t0, i, i + 1)
+        self.t1 = _grow(self.t1, i, i + 1)
+        self.t0[i], self.t1[i] = span
         self.vecs[i] = emb
         self.turn_start[i] = turn_start
         self.turn_end[i] = turn_end
@@ -123,6 +129,8 @@ class SessionScores:
     keywords: list[frozenset[str]]
     lexical: np.ndarray | None = None     # BM25 score per note (None when no query terms were given)
     sentence: np.ndarray | None = None    # best-sentence similarity per note (NaN: no sentence vectors)
+    t0: np.ndarray | None = None          # epoch seconds of the note's first / last message (NaN: unknown)
+    t1: np.ndarray | None = None
 
 
 class SharedIndex:
@@ -204,6 +212,7 @@ class SharedIndex:
             keyword_set(f"{label} {summary}"), decode_turn_vecs(meta),
             sv=sentences[0] if sentences else None,
             tf=meta.get("tf") or term_counts(f"{label} {summary}"),   # notes from before BM25: their summary text
+            span=_time_span(meta),
         )
         self._where[node_id] = key
 
@@ -225,6 +234,8 @@ class SharedIndex:
                 turn_end=block.turn_end[:n].copy(),
                 semantic=semantic,
                 sentence=sentence,
+                t0=block.t0[:n].copy(),
+                t1=block.t1[:n].copy(),
                 keywords=list(block.kw),
                 lexical=block.bm25.score(query_terms, max_df) if query_terms else None,
             )
@@ -263,6 +274,14 @@ class SharedIndex:
     def close(self) -> None:
         with self._lock:
             self._conn.close()
+
+
+def _time_span(meta: dict) -> tuple[float, float]:
+    try:
+        a, b = meta["time"]
+        return datetime.fromisoformat(a).timestamp(), datetime.fromisoformat(b).timestamp()
+    except (KeyError, TypeError, ValueError):
+        return float("nan"), float("nan")
 
 
 _SELECT = (

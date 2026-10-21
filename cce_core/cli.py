@@ -5,8 +5,11 @@
   cce inspect SESSION                 its notes: topics, turn ranges, sizes
   cce inspect SESSION --query "..."   why a question gets the context it gets (scores, budget, what was dropped)
   cce inspect SESSION --query "..." --json
+  cce export SESSION [--out file.json]     everything stored for the session as JSON
+  cce pins SESSION | cce pin SESSION --text "..." | --turn N | cce unpin SESSION PIN_ID
+  cce forget SESSION --note NODE_ID --yes | --turns 10-20 --yes
 
-Nothing is changed. The data folder is --data-dir, else CCE_DATA_DIR, else .cce_data.
+`inspect`, `export` and `pins` change nothing. The data folder is --data-dir, else CCE_DATA_DIR, else .cce_data.
 """
 
 from __future__ import annotations
@@ -110,19 +113,90 @@ def cmd_inspect(args) -> int:
     return 0
 
 
+def cmd_export(args) -> int:
+    mgr = _manager(args)
+    if not mgr.exists(args.session):
+        print(f"Unknown session {args.session!r}.", file=sys.stderr)
+        return 1
+    text = json.dumps(mgr.export_session(args.session), indent=2, ensure_ascii=False)
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+        print(f"Wrote {args.out}")
+    else:
+        print(text)
+    return 0
+
+
+def cmd_pins(args) -> int:
+    mgr = _manager(args)
+    if not mgr.exists(args.session):
+        print(f"Unknown session {args.session!r}.", file=sys.stderr)
+        return 1
+    if args.command == "pin":
+        print(mgr.pin(args.session, args.text, args.turn))
+    elif args.command == "unpin":
+        removed = mgr.unpin(args.session, args.pin_id)
+        print("removed" if removed else "no such pin")
+        return 0 if removed else 1
+    else:
+        for pin in mgr.list_pins(args.session):
+            print(f"{pin['pin_id']}  {pin['text'][:100]}")
+    return 0
+
+
+def cmd_forget(args) -> int:
+    if not args.yes:
+        print("Forgetting cannot be undone. Add --yes to go ahead.", file=sys.stderr)
+        return 1
+    mgr = _manager(args)
+    if not mgr.exists(args.session):
+        print(f"Unknown session {args.session!r}.", file=sys.stderr)
+        return 1
+    start = end = None
+    if args.turns:
+        a, _, b = args.turns.partition("-")
+        start, end = int(a), int(b or a)
+    report = mgr.forget(args.session, args.note, start, end)
+    print(f"Forgot {len(report['notes_removed'])} note(s) and {report['turns_removed']} stored turn(s).")
+    for n in report["notes_removed"]:
+        print(f"  turns {n['turns'][0]}-{n['turns'][1]}  {n['topic']}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(prog="cce", description="Look inside a CCE data folder.")
+    ap = argparse.ArgumentParser(prog="cce", description="Look inside and manage a CCE data folder.")
     sub = ap.add_subparsers(dest="command", required=True)
-    ins = sub.add_parser("inspect", help="list sessions, show a session's notes, or explain what a question retrieves")
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--data-dir", help="data folder (default: CCE_DATA_DIR or .cce_data)")
+    common.add_argument("--embedder", help="auto, neural, onnx or hash (must match the folder)")
+
+    ins = sub.add_parser("inspect", parents=[common], help="list sessions, show a session's notes, or explain what a question retrieves")
     ins.add_argument("session", nargs="?", help="session id (omit to list sessions)")
     ins.add_argument("--query", "-q", help="explain the context this question gets")
     ins.add_argument("--top-k", type=int, default=None)
-    ins.add_argument("--data-dir", help="data folder (default: CCE_DATA_DIR or .cce_data)")
-    ins.add_argument("--embedder", help="auto, neural, onnx or hash (must match the folder)")
     ins.add_argument("--json", action="store_true", help="machine-readable output")
+
+    exp = sub.add_parser("export", parents=[common], help="write everything stored for a session as JSON")
+    exp.add_argument("session")
+    exp.add_argument("--out", help="file to write (default: print)")
+
+    for name, text in (("pins", "list a session's pins"), ("pin", "pin a text or a stored turn"), ("unpin", "remove a pin")):
+        p = sub.add_parser(name, parents=[common], help=text)
+        p.add_argument("session")
+        if name == "pin":
+            p.add_argument("--text")
+            p.add_argument("--turn", type=int)
+        if name == "unpin":
+            p.add_argument("pin_id")
+
+    fg = sub.add_parser("forget", parents=[common], help="forget a note or a range of turns (cannot be undone)")
+    fg.add_argument("session")
+    fg.add_argument("--note", help="note id (see `cce export`)")
+    fg.add_argument("--turns", help="turn range, e.g. 10-20")
+    fg.add_argument("--yes", action="store_true", help="confirm")
     args = ap.parse_args(argv)
     try:
-        code = cmd_inspect(args)
+        code = {"inspect": cmd_inspect, "export": cmd_export, "forget": cmd_forget}.get(args.command, cmd_pins)(args)
     except ValueError as exc:      # embedder mismatch, bad session id
         print(f"error: {exc}", file=sys.stderr)
         code = 2

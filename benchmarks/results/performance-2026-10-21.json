@@ -1,0 +1,57 @@
+{
+  "machine": {
+    "cpu": "AMD64 Family 25 Model 80 Stepping 0, AuthenticAMD",
+    "cores": 16,
+    "os": "Windows-11-10.0.26300-SP0",
+    "python": "3.12.13",
+    "date": "2026-10-21"
+  },
+  "runs": [
+    {
+      "embedder": "hash",
+      "keep_raw_turns": true,
+      "messages": 1000,
+      "notes": 136,
+      "messages_per_second": 166.2,
+      "query_ms_p50": 16.5,
+      "query_ms_p95": 22.6,
+      "db_kb_per_1000_messages": 7799.5
+    },
+    {
+      "embedder": "onnx",
+      "keep_raw_turns": true,
+      "messages": 1000,
+      "notes": 218,
+      "messages_per_second": 6.1,
+      "query_ms_p50": 44.8,
+      "query_ms_p95": 159.2,
+      "db_kb_per_1000_messages": 6535.5
+    },
+    {
+      "embedder": "neural",
+      "keep_raw_turns": true,
+      "messages": 1000,
+      "notes": 236,
+      "messages_per_second": 8.9,
+      "query_ms_p50": 63.1,
+      "query_ms_p95": 151.0,
+      "db_kb_per_1000_messages": 6591.5
+    }
+  ],
+  "keep_raw_off": {
+    "embedder": "hash",
+    "keep_raw_turns": false,
+    "messages": 1000,
+    "notes": 136,
+    "messages_per_second": 180.8,
+    "query_ms_p50": 14.5,
+    "query_ms_p95": 17.0,
+    "db_kb_per_1000_messages": 7031.5
+  },
+  "index_memory": {
+    "notes": 10000,
+    "index_mb": 382.9,
+    "vector_arrays_mb": 267.4,
+    "db_mb": 178.1
+  }
+}

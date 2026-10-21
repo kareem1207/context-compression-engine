@@ -173,7 +173,8 @@ class Merger:
         else:
             body = " ".join(micros)
         tf = term_counts(f"{chunk.topic_label} {meso} {body}")
-        roles = "".join(t.role[0] for t in chunk.turns)      # u(ser) / a(ssistant) / s(ystem) / t(ool), per turn
+        roles = "".join(t.role[0] for t in chunk.turns)
+        span = [min(t.timestamp for t in chunk.turns).isoformat(), max(t.timestamp for t in chunk.turns).isoformat()]      # u(ser) / a(ssistant) / s(ystem) / t(ool), per turn
         sentence_meta = {}
         if chunk.sentence_embeddings is not None and len(chunk.sentence_map):
             sentence_meta = {"sent_vecs": encode_turn_vecs(chunk.sentence_embeddings), "sent_map": chunk.sentence_map}
@@ -194,6 +195,7 @@ class Merger:
                 **chunk.metadata,
                 "tf": tf,
                 "roles": roles,
+                "time": span,
                 **sentence_meta,
                 **({"turn_vecs": encode_turn_vecs(chunk.turn_embeddings)} if chunk.turn_embeddings is not None else {}),
             },
@@ -240,6 +242,10 @@ def merge_nodes(a: MemoryNode, b: MemoryNode, config: CCEConfig = DEFAULT_CONFIG
         tf[term] = tf.get(term, 0) + n
     if tf:
         metadata["tf"] = dict(sorted(tf.items(), key=lambda kv: -kv[1])[:600])
+    if a.metadata.get("time") and b.metadata.get("time"):
+        metadata["time"] = [min(a.metadata["time"][0], b.metadata["time"][0]), max(a.metadata["time"][1], b.metadata["time"][1])]
+    else:
+        metadata.pop("time", None)
     if a.metadata.get("roles") is not None and b.metadata.get("roles") is not None:
         metadata["roles"] = a.metadata["roles"] + b.metadata["roles"]
     else:

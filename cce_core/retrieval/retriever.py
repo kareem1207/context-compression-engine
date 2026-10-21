@@ -18,6 +18,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Callable
 
 import numpy as np
@@ -318,6 +319,11 @@ def fill_overviews(results, raw_fn: RawFn | None, config: CCEConfig) -> None:
         r.overview_lines = overview_lines(r.node, raw_fn, per_topic, doc_freq, len(results))
 
 
+def _epoch(moment: datetime) -> float:
+    """Epoch seconds; a moment without a timezone is taken as UTC."""
+    return (moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)).timestamp()
+
+
 def sentence_similarity(node: MemoryNode, qvec: np.ndarray) -> float:
     """Best-matching sentence of the note's long messages, or NaN when it has no sentence vectors."""
     stored = decode_sentence_vecs(node.metadata)
@@ -389,6 +395,9 @@ class Retriever:
         top_k: int | None = None,
         recency_boost: float | None = None,
         keyword_bonus_weight: float = 0.15,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        last_turns: int | None = None,
     ) -> list[RetrievalResult]:
         """
         Main retrieval entry point.
@@ -426,12 +435,22 @@ class Retriever:
             extra.append((lexical, lexical > 0, self.config.lexical_weight))
         composite = fuse(dense, *extra, k=self.config.rrf_k)
 
+        # Optional time filters: notes whose messages overlap the date range / that reach into the last N turns.
+        # A note without a recorded time (made by an older version) never matches a date range.
+        allowed = np.ones(len(dense), dtype=bool)
+        if last_turns is not None:
+            allowed &= scores.turn_end >= store.next_index - int(last_turns)
+        if since is not None:
+            allowed &= scores.t1 >= _epoch(since)       # NaN compares false: unknown times are left out
+        if until is not None:
+            allowed &= scores.t0 <= _epoch(until)
+
         if is_overview_query(query):
             # Every topic, in the order they happened (capped), instead of the few closest matches.
-            order = np.argsort(scores.turn_start, kind="stable")[: self.config.overview_max_topics]
+            order = [i for i in np.argsort(scores.turn_start, kind="stable") if allowed[i]][: self.config.overview_max_topics]
         else:
             # best first; equal scores keep conversation order
-            order = np.lexsort((scores.turn_start, -composite))[:top_k]
+            order = [i for i in np.lexsort((scores.turn_start, -composite)) if allowed[i]][:top_k]
 
         nodes = {n.node_id: n for n in store.warm.get_many([scores.node_ids[i] for i in order])}
         results: list[RetrievalResult] = []

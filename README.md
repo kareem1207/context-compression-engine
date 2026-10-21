@@ -200,6 +200,22 @@ Each of these has a runnable example in [`examples/integrations/`](https://githu
 
 The LangChain and LlamaIndex classes were checked against langchain-core 1.6.12 and llama-index-core 0.14.25 (2026-10-21). LangChain now recommends LangGraph persistence over `RunnableWithMessageHistory`; `CCEChatMessageHistory` is a standard `BaseChatMessageHistory`, so it works with either.
 
+### Manage what is remembered
+
+| To | REST | MCP tool | `cce` command |
+|---|---|---|---|
+| keep a fact in every context | `POST /v1/sessions/{id}/pins` (`text`, or `turn` = a stored turn) | `cce_pin_memory` | `cce pin` / `cce pins` / `cce unpin` |
+| change or remove a pin | `PUT` / `DELETE /pins/{pin_id}` | `cce_pin_memory` | |
+| correct a note | `PATCH /v1/sessions/{id}/notes/{node_id}` | | |
+| correct a stored turn | `PATCH /v1/sessions/{id}/turns/{index}` | | |
+| forget | `POST /v1/sessions/{id}/forget` (`node_id`, or `start` and `end`) | `cce_forget_memory` (needs `confirm`) | `cce forget ... --yes` |
+| export everything | `GET /v1/sessions/{id}/export` | `cce_export_session` | `cce export` |
+| delete the session | `DELETE /v1/sessions/{id}` | | |
+
+Pinned text is sent with every context of the session, before anything else, using at most a quarter of the token budget. Memory is forgotten a note at a time: every note that overlaps the turns you name is deleted with the original text it covered (a summary cannot be cut apart); recent and pending turns in the range are removed too. Turn numbers never go back. Editing a note changes its label and summary, not its vectors. Exports hold turns, notes, pins and the session summary, without vectors.
+
+**Time-aware queries.** `POST /v1/sessions/{id}/context` (and `cce_retrieve_context`, `getContext`) accept `since` and `until` (ISO 8601) and `last_turns`: only notes whose messages fall in that period, or reach into the last N turns, and only recent turns from it. Notes made by older versions have no recorded time and never match a date range.
+
 ### See why something was retrieved
 
 `POST /v1/sessions/{id}/context?explain=1` (or `"explain": true`, or `explain=true` on the `cce_retrieve_context` MCP tool) returns, next to the context, which notes and quotes were chosen, their scores (dense, recency, BM25, fused), the token budget split (system note, recent turns, pending turns, notes, overhead) and the notes that were retrieved but dropped to fit. From a terminal:
@@ -231,7 +247,7 @@ All tunables live in [`cce_core/config.py`](https://github.com/kareem1207/contex
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `summarizer_mode` | `extractive` | `extractive` (offline) or `llm` (local model) |
+| `summarizer_mode` | `extractive` | `extractive` (offline; what every benchmark here uses) or `llm` (experimental: one call to an OpenAI-compatible server per summary, not benchmarked, prints a warning) |
 | `chunk_similarity_threshold` | `0.45` | cosine similarity below this starts a new topic |
 | `chunk_min_turns` / `chunk_max_turns` | `2` / `20` | chunk size bounds |
 | `hot_tier_max_turns` | `10` | recent turns kept verbatim |
@@ -294,6 +310,20 @@ A topic note holds a summary and one short line per message, and a summary drops
 
 `GET /v1/sessions/{id}/stats` (and `cce_session_stats`) report, among others: `raw_tokens` (the whole session as it was said), `tokens_sent` (what sending the whole session would cost now: the notes as they are sent plus the hot and pending turns, verbatim), `tokens_saved` (`raw_tokens - tokens_sent`, never below 0) and `compression_ratio` (`raw_tokens / tokens_sent`). `compression_ratio` is `null` while the session is not smaller than its raw text, which is normal for short chats where everything is still verbatim. `warm_tokens_original` is the raw size of the turns the notes cover and `warm_tokens_compressed` the size of those notes as sent; `raw_turns_stored` counts the turns whose original text is kept.
 
+## Speed and size
+
+Measured with `benchmarks/performance.py` on AMD64 Family 25 Model 80 Stepping 0, AuthenticAMD, 16 logical cores, Windows-11-10.0.26300-SP0, Python 3.12.13, CCE 1.0.0 code from 2026-10-21. 1,000 real chat messages (UltraChat, clipped to 120 words), live ingestion one message at a time with every piece of the pipeline running (embedding, topic chunking, summaries, sentence vectors, SQLite), 100 queries against the resulting session, `keep_raw_turns` on.
+
+| Embedder | Messages ingested per second | Query p50 / p95 (ms) | Notes | Database growth (MB per 1,000 messages) |
+|---|---|---|---|---|
+| `hash` | 166.2 | 16.5 / 22.6 | 136 | 7.6 |
+| `onnx` | 6.1 | 44.8 / 159.2 | 218 | 6.4 |
+| `neural` | 8.9 | 63.1 / 151.0 | 236 | 6.4 |
+
+- Without raw text (`keep_raw_turns=false`) the hash run grew 6.9 MB per 1,000 messages instead of 7.6: the stored text is a small part of it. In a 400-message hash run the per-sentence vectors of long messages (`sentence_index_min_words`) were about 60% of the database file, the per-message vectors about 15%, the original text about 5% and the per-note term counts about 4%. Set `sentence_index_min_words=0` to give up the sentence index and most of that growth.
+- Search index memory: 382.9 MB of Python memory for 10,000 synthetic notes (384 dimensions, 6 message vectors and 8 sentence vectors per note; 267.4 MB of that is the vector arrays), database 178.1 MB. The index is loaded once per data folder and grows with the notes of all sessions; `warm_tier_max_chunks` (500 per session) bounds a session.
+- Ingestion with a neural embedder is slow: a few messages per second on this CPU, because every message is embedded for chunking, again for the note, and long messages again per sentence. Queries are fast (the query itself is the only embedding). Bulk-loading a long history with `add_messages` or `/v1/compress` costs the same per message. This is the main speed weakness; it has not been optimised.
+
 ## What the results do and do not show
 
 - **Live sessions and one-shot mode.** "Live sessions" (the MCP server and the REST sessions) and "one-shot" mode (`/v1/compress`, `full_pipeline`) use the same compression. Before 1.0, live sessions did not group topics: every message that left the recent-turns window became a note of its own. The benchmarks in [`benchmarks/README.md`](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md) were produced with one-shot mode, and before that live-session fix. **They have not been re-run for 1.0.**
@@ -313,6 +343,8 @@ A topic note holds a summary and one short line per message, and a summary drops
 - **The extractive summariser picks sentences; it does not paraphrase.** Use `llm` mode for more fluent summaries when a model is available.
 - **Live sessions keep their state in the same SQLite file.** The last `hot_tier_max_turns` turns, the turns waiting to be compressed, and the turn counters are saved as messages arrive, so a restart or crash picks up where it stopped. Waiting turns are sent to the model verbatim until they are compressed, so nothing falls in a gap. After compression, the original text of each turn stays in the same file unless you turn that off (`keep_raw_turns`, see [Raw text and privacy](#raw-text-and-privacy)).
 - **Embedders.** `neural` is all-MiniLM-L6-v2 through sentence-transformers (English, pulls in PyTorch, about 1 GB installed). `onnx` is `paraphrase-multilingual-MiniLM-L12-v2` (int8) run with onnxruntime: no PyTorch, 384 dimensions, 50+ languages. `pip install "context-compression-engine[onnx]"` adds about 115 MB of packages (numpy included) and downloads 135 MB of model files on first use (`onnx_model` in the config). `hash` needs nothing and matches shared words only (Latin script). With `embedder="auto"` CCE uses `neural` if sentence-transformers is installed, else `onnx` if onnxruntime is installed, else `hash`; a data folder remembers its embedder, so switching is refused rather than silently wrong. Measured on the hand-written Spanish, Hindi and Chinese set in `benchmarks/retrieval_multilingual.py` (5 conversations x 4 questions per language, 2026-10-21): onnx 60/60, MiniLM 49/60, hash 23/60; on 96 English questions onnx finds 96/96, as MiniLM does. BM25 matches Latin-script terms only, so exact-term search does not help Chinese or Hindi text yet.
+- **Cold-tier session summaries are not used by retrieval.** CCE still writes one summary paragraph per closed session (`cold_tier_max_summaries` bounds how many are kept), and it appears in `cce inspect`, the export and the dashboard, but nothing in search or context building reads it. Adding it to overview answers did not help in the overview benchmark (36/60 either way), so it was not wired in. Cross-session questions are not supported.
+- **The `llm` summariser is experimental.** It has not been benchmarked against the extractive summariser; if the call fails, the extractive summary is used.
 - **Overview questions** ("what did we talk about?") list every topic in conversation order. Each topic shows the first user message of its note, then the sentences that carry the most terms particular to that topic (tf-idf, one new term set per line), within an even share of the budget. The previous behaviour showed the extractive summary of each topic, which used more tokens for the same coverage.
 - **BM25 is used for exact terms only.** Ids such as `ERR-4021-X` or a UUID, acronyms, names and numbers in a question are matched exactly against the notes and fused with the dense ranking (reciprocal rank). Ordinary lower-case words are not, because exact matching of them added noise to paraphrased questions in our tests (two of 48 were lost). This helps when the dense embedder cannot tell such tokens apart; it does not make the hash embedder understand paraphrases.
 - **Token counts are estimates.** Offline, CCE estimates from words and characters (CJK text, code and JSON count higher than plain English). With the optional `tokens` extra (`tiktoken`) and its vocabulary already cached, counts are exact for `cl100k_base`; CCE never downloads it. Other models tokenize differently. `context_max_tokens` is a cap on this estimate.
