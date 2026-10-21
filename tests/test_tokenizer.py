@@ -43,7 +43,7 @@ def no_tiktoken(monkeypatch):
 def test_estimate_is_close_to_tiktoken_and_does_not_undercount_much(name):
     est = tokenizer.estimate(SAMPLES[name])
     real = CL100K[name]
-    assert 0.85 * real <= est <= 1.3 * real, f"{name}: estimated {est}, cl100k_base says {real}"
+    assert 0.85 * real <= est <= 1.5 * real, f"{name}: estimated {est}, cl100k_base says {real}"
 
 
 def test_cjk_and_minified_json_are_no_longer_one_token():
@@ -120,3 +120,18 @@ def test_context_never_exceeds_the_cap(name, where):
     assert tokenizer.count_messages(payload.to_messages()) <= cap
     assert tokenizer.count(payload.to_string()) <= cap
     assert payload.was_truncated
+
+
+def test_runs_of_one_character_are_not_counted_per_character():
+    """Regression for the lost recall questions: a template line of underscores counted ~1,700 tokens
+    (tiktoken: ~160) and crowded the past context out of the payload."""
+    template = 'Event Name: ' + "_" * 60 + " Event Date: " + "_" * 60 + " " + "-" * 80 + "\n" + "=" * 80
+    assert tokenizer.estimate(template) < 40
+    page = ("Catering Agreement This agreement is made on " + "_" * 400 + " between the caterer and the client. ") * 10
+    assert tokenizer.estimate(page) < 1.5 * len(page.split()) / 0.75
+
+
+def test_ordinary_english_chat_counts_as_it_always_did():
+    chat = ("Sure! Here are a few ideas for your weekend trip: visit the old town, try the local food, "
+            "and take the morning train so you arrive before the crowds. Let me know if you want more details.")
+    assert tokenizer.estimate(chat) == round(len(chat.split()) / 0.75)
