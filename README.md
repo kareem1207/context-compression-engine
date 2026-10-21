@@ -51,12 +51,12 @@ Or install it into your own project from PyPI:
 pip install "context-compression-engine[neural]"          # recommended: engine + the neural embedder
 pip install "context-compression-engine[all]"             # everything: neural, REST API, MCP server, dashboard
 pip install context-compression-engine                    # the light engine only (hashing embedder, no PyTorch)
-# extras: [neural] embedder, [rest] REST API, [mcp] MCP server, [ui] dashboard
+# extras: [neural] English embedder (PyTorch), [onnx] multilingual embedder (no PyTorch), [rest] REST API, [mcp] MCP server, [ui] dashboard
 ```
 
 This also gives you two commands: `cce-rest` (the REST API) and `cce-mcp` (the MCP server).
 
-**Two embedders.** The engine needs one to find topics and match questions:
+**Three embedders.** The engine needs one to find topics and match questions. `neural` and `onnx` understand paraphrase; `onnx` does it in 50+ languages without PyTorch (see Design notes for sizes and numbers):
 
 | | `neural` (recommended) | `hash` |
 |---|---|---|
@@ -64,7 +64,7 @@ This also gives you two commands: `cce-rest` (the REST API) and `cce-mcp` (the M
 | Understands paraphrase | yes | no, matches shared words only |
 | Held-out recall in our test | 99% | 55% (lexical 100%, paraphrase 10%) |
 
-`CCE_EMBEDDER=auto` (the default) uses neural when installed and hashing otherwise. The first neural run downloads `sentence-transformers/all-MiniLM-L6-v2` (about 90 MB) from Hugging Face, then works offline. Do not mix embedders within one stored session: the engine will raise a clear error if you try.
+`CCE_EMBEDDER=auto` (the default) uses neural when installed, then onnx when installed, and hashing otherwise. The first neural run downloads `sentence-transformers/all-MiniLM-L6-v2` (about 90 MB) from Hugging Face, then works offline. Do not mix embedders within one stored session: the engine will raise a clear error if you try.
 
 ### Use it as a library
 
@@ -217,13 +217,14 @@ All tunables live in [`cce_core/config.py`](https://github.com/kareem1207/contex
 | `live_pending_max_turns` / `live_pending_max_tokens` | `24` / `3000` | live sessions: flush the waiting turns even if the last topic is still going |
 | `sentence_index_min_words` / `sentence_discount` | `40` / `0.9` | messages with at least this many words also get one vector per sentence (`0` = off); a sentence's score counts at this fraction against whole-message scores |
 | `lexical_weight` / `lexical_terms` | `1.0` / `distinctive` | weight of the BM25 ranking in the fusion (`0` = dense only); `distinctive` sends only identifiers, codes, acronyms, names and numbers of the question to BM25, `all` sends every non-stopword |
+| `onnx_model` / `onnx_max_length` | `Xenova/paraphrase-multilingual-MiniLM-L12-v2` / `256` | model and input length of the `onnx` embedder |
 | `keep_raw_turns` | `true` | keep the original text of compressed turns in the local SQLite file so a topic can quote the exact sentence that answers a question (env `CCE_KEEP_RAW_TURNS=0` turns it off; see [Raw text and privacy](#raw-text-and-privacy)) |
 | `overview_max_topics` / `overview_budget_share` | `24` / `0.65` | "what did we talk about?" questions list up to this many topics, in conversation order, sharing this fraction of `context_max_tokens` evenly |
 | `retrieval_top_k` | `5` | nodes retrieved per query |
 | `retrieval_recency_boost` | `0.2` | bonus for recent chunks |
 | `context_max_tokens` | `2048` | hard cap on the assembled context |
 
-Environment variables: `CCE_EMBEDDER` (`auto`, `neural` or `hash`), `CCE_DATA_DIR` (storage folder, default `.cce_data`), `CCE_LLM_ENDPOINT`, `CCE_LLM_MODEL`, and for the MCP server `CCE_SUMMARIZER_MODE`, `CCE_HOT_TIER_TURNS`, `CCE_TOP_K`, `CCE_MAX_TOKENS`.
+Environment variables: `CCE_EMBEDDER` (`auto`, `neural`, `onnx` or `hash`), `CCE_DATA_DIR` (storage folder, default `.cce_data`), `CCE_LLM_ENDPOINT`, `CCE_LLM_MODEL`, and for the MCP server `CCE_SUMMARIZER_MODE`, `CCE_HOT_TIER_TURNS`, `CCE_TOP_K`, `CCE_MAX_TOKENS`.
 
 ---
 
@@ -287,6 +288,7 @@ A topic note holds a summary and one short line per message, and a summary drops
 - **Compression only kicks in once a topic is longer than the summary budget** (`meso_max_tokens`). Short topics are kept as they are.
 - **The extractive summariser picks sentences; it does not paraphrase.** Use `llm` mode for more fluent summaries when a model is available.
 - **Live sessions keep their state in the same SQLite file.** The last `hot_tier_max_turns` turns, the turns waiting to be compressed, and the turn counters are saved as messages arrive, so a restart or crash picks up where it stopped. Waiting turns are sent to the model verbatim until they are compressed, so nothing falls in a gap. After compression, the original text of each turn stays in the same file unless you turn that off (`keep_raw_turns`, see [Raw text and privacy](#raw-text-and-privacy)).
+- **Embedders.** `neural` is all-MiniLM-L6-v2 through sentence-transformers (English, pulls in PyTorch, about 1 GB installed). `onnx` is `paraphrase-multilingual-MiniLM-L12-v2` (int8) run with onnxruntime: no PyTorch, 384 dimensions, 50+ languages. `pip install "context-compression-engine[onnx]"` adds about 115 MB of packages (numpy included) and downloads 135 MB of model files on first use (`onnx_model` in the config). `hash` needs nothing and matches shared words only (Latin script). With `embedder="auto"` CCE uses `neural` if sentence-transformers is installed, else `onnx` if onnxruntime is installed, else `hash`; a data folder remembers its embedder, so switching is refused rather than silently wrong. Measured on the hand-written Spanish, Hindi and Chinese set in `benchmarks/retrieval_multilingual.py` (5 conversations x 4 questions per language, 2026-10-21): onnx 60/60, MiniLM 49/60, hash 23/60; on 96 English questions onnx finds 96/96, as MiniLM does. BM25 matches Latin-script terms only, so exact-term search does not help Chinese or Hindi text yet.
 - **Overview questions** ("what did we talk about?") list every topic in conversation order. Each topic shows the first user message of its note, then the sentences that carry the most terms particular to that topic (tf-idf, one new term set per line), within an even share of the budget. The previous behaviour showed the extractive summary of each topic, which used more tokens for the same coverage.
 - **BM25 is used for exact terms only.** Ids such as `ERR-4021-X` or a UUID, acronyms, names and numbers in a question are matched exactly against the notes and fused with the dense ranking (reciprocal rank). Ordinary lower-case words are not, because exact matching of them added noise to paraphrased questions in our tests (two of 48 were lost). This helps when the dense embedder cannot tell such tokens apart; it does not make the hash embedder understand paraphrases.
 - **Token counts are estimates.** Offline, CCE estimates from words and characters (CJK text, code and JSON count higher than plain English). With the optional `tokens` extra (`tiktoken`) and its vocabulary already cached, counts are exact for `cl100k_base`; CCE never downloads it. Other models tokenize differently. `context_max_tokens` is a cap on this estimate.

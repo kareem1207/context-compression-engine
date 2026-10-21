@@ -15,7 +15,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
-          key: hf-all-MiniLM-L6-v2
+          key: hf-minilm-onnx-multilingual-v1
       - run: uv sync
       # test_e2e_gemma.py needs a running llama.cpp server, so it is skipped here.
       - run: uv run pytest -q --ignore=tests/test_e2e_gemma.py
@@ -48,10 +48,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
-          key: hf-all-MiniLM-L6-v2-ultrachat
+          key: hf-minilm-onnx-multilingual-ultrachat-v1
       - run: uv sync --group bench
       - name: Recall, 3 pinned conversations (seeds 508-510; seed 510 holds the message that broke it)
         run: uv run --group bench python benchmarks/retrieval_recall.py --conversations 3 --seed-start 508 --top-k 5 --variants cce,cce_hash --min cce=0.95 --min cce_hash=0.5
+      - name: Multilingual recall (Spanish, Hindi, Chinese) with the ONNX embedder
+        run: uv run --group bench python benchmarks/retrieval_multilingual.py --seeds 2 --embedders onnx --min onnx=0.9
       - name: Live sessions, 2 pinned conversations (one-shot, live, restart, crash, facts buried in longer messages)
         run: uv run --group bench python benchmarks/retrieval_live.py --conversations 2 --seed-start 509 --top-k 5 --modes oneshot,live,live_restart,live_crash,live_buried,oneshot_buried --min oneshot=0.95 --min live=0.95 --min live_restart=0.9 --min live_crash=0.95 --min live_buried=0.9 --min oneshot_buried=0.9
 

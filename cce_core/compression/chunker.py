@@ -25,7 +25,7 @@ import numpy as np
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
 from cce_core.embedding import load_embedder
 from cce_core.ingestion.segmenter import Turn
-from cce_core.text import split_sentences
+from cce_core.text import length_in_words, split_sentences
 
 if TYPE_CHECKING:
     pass
@@ -281,7 +281,7 @@ class SemanticChunker:
             return None, []
         items: list[tuple[int, int, str]] = []
         for i, t in enumerate(turns):
-            if len(t.content.split()) < cfg.sentence_index_min_words:
+            if length_in_words(t.content) < cfg.sentence_index_min_words:
                 continue
             sents = split_sentences(t.content)[: cfg.sentence_index_max_per_turn]
             if len(sents) >= 2:

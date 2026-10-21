@@ -44,9 +44,10 @@ def test_explicit_modes():
         load_embedder(CCEConfig(embedder="nope"))
 
 
-def test_auto_falls_back_to_hash_without_sentence_transformers(monkeypatch):
+def test_auto_falls_back_to_hash_without_sentence_transformers_or_onnx(monkeypatch):
     import cce_core.embedding as emb
     monkeypatch.setattr(emb, "neural_available", lambda: False)
+    monkeypatch.setattr(emb, "onnx_available", lambda: False)
     assert emb.load_embedder(CCEConfig(embedder="auto")).name == "hash"
     with pytest.raises(ImportError):
         emb.load_embedder(CCEConfig(embedder="neural"))

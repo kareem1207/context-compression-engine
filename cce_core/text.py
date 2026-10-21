@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import re
 
-_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
+# Latin sentences end with ". " (a space follows); Chinese/Japanese (。！？) and Devanagari (।) are written without one.
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|(?<=[\u3002\uff01\uff1f\u0964])\s*|\n+")
+_CJK_CHAR = re.compile("[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]")
 
 # A term is a run of letters/digits, optionally joined by - _ . / : so that ids such as
 # "ERR-4021-X" or "3f2a9c1e-8b7d-4e1a" stay whole; the pieces are indexed as well.
@@ -17,6 +19,11 @@ STOPWORDS = frozenset(
     "give show help from by as its were been which who whom there their them then than too very also into "
     "some any all more most other such only own same our out up down over under again further once".split()
 )
+
+
+def length_in_words(text: str) -> int:
+    """Words for space-separated scripts; CJK text has no spaces, so two characters count as one word."""
+    return len(text.split()) + len(_CJK_CHAR.findall(text)) // 2
 
 
 def split_sentences(text: str) -> list[str]:
