@@ -28,6 +28,24 @@ class CCEConfig:
     chunk_max_turns: int = 20                  # hard cap — force split after this
     chunk_window_size: int = 3                 # sliding window for boundary detection
 
+    # ── Sentence index / lexical search ───────────────────────────────────────
+    # Messages with at least this many words also get one vector per sentence (float16, stored with the
+    # note), so a fact inside a long message is ranked and quoted on its own. 0 = off.
+    sentence_index_min_words: int = 40
+    sentence_index_max_per_turn: int = 40
+    # Notes are also ranked with BM25 over their text; the dense and BM25 rankings are fused (reciprocal rank).
+    bm25_k1: float = 1.2
+    bm25_b: float = 0.75
+    rrf_k: int = 60
+    # A note's dense score is the larger of its message score and its best sentence score times this.
+    # Below 1, because with one vector per sentence there are many more chances for an unrelated sentence to match.
+    sentence_discount: float = 0.9
+    lexical_max_df: float = 1.0       # BM25 ignores query terms found in more than this share of a session's notes
+    # Which question terms go to BM25: "distinctive" = identifiers, codes, acronyms, names and numbers;
+    # "all" = every non-stopword. Exact matching of ordinary words only adds noise to paraphrased questions.
+    lexical_terms: str = "distinctive"
+    lexical_weight: float = 1.0       # weight of the BM25 ranking against the dense ranking (0 = dense only)
+
     # ── Summarizer ────────────────────────────────────────────────────────────
     # micro  = single turn condensed to one sentence
     # meso   = topic chunk condensed to 2-4 sentences

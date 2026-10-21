@@ -24,8 +24,10 @@ from pathlib import Path
 
 import numpy as np
 
-from cce_core.compression.merger import decode_turn_vecs
+from cce_core.compression.merger import decode_sentence_vecs, decode_turn_vecs
+from cce_core.retrieval.bm25 import Bm25
 from cce_core.retrieval.keywords import keyword_set
+from cce_core.text import term_counts
 
 _DIM_ERROR = (
     "Stored embeddings have {stored} dimensions but the active embedder produces {given}. "
@@ -56,14 +58,21 @@ class _Block:
         self.kw: list[frozenset[str]] = []
         self.tn = 0
         self.tvecs = np.empty((16, dim), dtype=np.float32)
+        self.s_off = np.empty(16, dtype=np.int64)      # same for the sentence vectors of the long messages
+        self.s_len = np.empty(16, dtype=np.int64)
+        self.sn = 0
+        self.svecs = np.empty((16, dim), dtype=np.float32)
+        self.bm25 = Bm25()
 
-    def append(self, node_id, emb, turn_start, turn_end, kw, tv):
+    def append(self, node_id, emb, turn_start, turn_end, kw, tv, sv=None, tf=None):
         i = self.n
         self.vecs = _grow(self.vecs, i, i + 1)
         self.turn_start = _grow(self.turn_start, i, i + 1)
         self.turn_end = _grow(self.turn_end, i, i + 1)
         self.t_off = _grow(self.t_off, i, i + 1)
         self.t_len = _grow(self.t_len, i, i + 1)
+        self.s_off = _grow(self.s_off, i, i + 1)
+        self.s_len = _grow(self.s_len, i, i + 1)
         self.vecs[i] = emb
         self.turn_start[i] = turn_start
         self.turn_end[i] = turn_end
@@ -74,21 +83,34 @@ class _Block:
             self.tn += len(tv)
         else:
             self.t_off[i], self.t_len[i] = self.tn, 0
+        if sv is not None and sv.shape[1] == self.dim and len(sv):
+            self.svecs = _grow(self.svecs, self.sn, self.sn + len(sv))
+            self.svecs[self.sn:self.sn + len(sv)] = sv
+            self.s_off[i], self.s_len[i] = self.sn, len(sv)
+            self.sn += len(sv)
+        else:
+            self.s_off[i], self.s_len[i] = self.sn, 0
+        self.bm25.add(tf or {})
         self.node_ids.append(node_id)
         self.kw.append(kw)
         self.n += 1
 
-    def similarity(self, q: np.ndarray) -> np.ndarray:
-        """Per note: the best of its centroid and its best-matching message."""
+    def similarity(self, q: np.ndarray):
+        """Per note: (best of its centroid and its best-matching message, best-matching sentence or NaN)."""
         n = self.n
         sem = self.vecs[:n] @ q
-        if self.tn:
-            has = self.t_len[:n] > 0
-            if has.any():
-                msg = self.tvecs[:self.tn] @ q
-                best = np.maximum.reduceat(msg, self.t_off[:n][has])
-                sem[has] = np.maximum(sem[has], best)
-        return sem
+        sent = np.full(n, np.nan, dtype=np.float32)
+        for count, vecs, off, length, out in ((self.tn, self.tvecs, self.t_off, self.t_len, None),
+                                              (self.sn, self.svecs, self.s_off, self.s_len, sent)):
+            if count:
+                has = length[:n] > 0
+                if has.any():
+                    best = np.maximum.reduceat(vecs[:count] @ q, off[:n][has])
+                    if out is None:
+                        sem[has] = np.maximum(sem[has], best)
+                    else:
+                        out[has] = best
+        return sem, sent
 
 
 @dataclass
@@ -99,6 +121,8 @@ class SessionScores:
     turn_end: np.ndarray
     semantic: np.ndarray
     keywords: list[frozenset[str]]
+    lexical: np.ndarray | None = None     # BM25 score per note (None when no query terms were given)
+    sentence: np.ndarray | None = None    # best-sentence similarity per note (NaN: no sentence vectors)
 
 
 class SharedIndex:
@@ -173,15 +197,19 @@ class SharedIndex:
             block = self._blocks[key] = _Block(len(emb))
         elif block.dim != len(emb):
             return   # a session never mixes embedders; ignore a stray note rather than fail every query
+        meta = json.loads(metadata)
+        sentences = decode_sentence_vecs(meta)
         block.append(
             node_id, emb, turn_start, turn_end,
-            keyword_set(f"{label} {summary}"), decode_turn_vecs(json.loads(metadata)),
+            keyword_set(f"{label} {summary}"), decode_turn_vecs(meta),
+            sv=sentences[0] if sentences else None,
+            tf=meta.get("tf") or term_counts(f"{label} {summary}"),   # notes from before BM25: their summary text
         )
         self._where[node_id] = key
 
     # ── Queries ───────────────────────────────────────────────────────────────
 
-    def session_scores(self, session_id: str, qvec: np.ndarray) -> SessionScores | None:
+    def session_scores(self, session_id: str, qvec: np.ndarray, query_terms=None, max_df=None) -> SessionScores | None:
         with self._lock:
             self.sync()
             block = self._blocks.get(session_id or "")
@@ -190,12 +218,15 @@ class SharedIndex:
             if block.dim != qvec.shape[0]:
                 raise ValueError(_DIM_ERROR.format(stored=block.dim, given=qvec.shape[0]))
             n = block.n
+            semantic, sentence = block.similarity(qvec.astype(np.float32))
             return SessionScores(
                 node_ids=list(block.node_ids),
                 turn_start=block.turn_start[:n].copy(),
                 turn_end=block.turn_end[:n].copy(),
-                semantic=block.similarity(qvec.astype(np.float32)),
+                semantic=semantic,
+                sentence=sentence,
                 keywords=list(block.kw),
+                lexical=block.bm25.score(query_terms, max_df) if query_terms else None,
             )
 
     def search(self, qvec: np.ndarray, top_k: int, session_id: str | None, recency_boost: float):

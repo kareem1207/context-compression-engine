@@ -106,7 +106,7 @@ class StatelessProcessor:
 
         # In-memory retrieval (no DB — use pure vector math)
         query_emb = self.engine.chunker.embed_text(query)
-        scored = self._score_nodes(query_emb, past_nodes)
+        scored = self._score_nodes(query_emb, past_nodes, query)
         from cce_core.retrieval.retriever import is_overview_query
 
         if is_overview_query(query):
@@ -130,13 +130,13 @@ class StatelessProcessor:
                 semantic_score=float(score),
                 recency_score=0.0,
                 keyword_score=0.0,
-                composite_score=float(score),
+                composite_score=float(fused),
                 best_turn=best_text,
                 evidence=[] if is_overview_query(query) else node_evidence(
                 node, query_emb.astype("float32"),
                 raw_fn=raw_fn if self.config.keep_raw_turns else None, embed_many=embed_many),
             )
-            for node, score, best_text in top_results
+            for node, score, best_text, fused in top_results
         ]
 
         if not retrieval_results:
@@ -184,19 +184,12 @@ class StatelessProcessor:
         self,
         query_emb,
         nodes: list[MemoryNode],
-    ) -> list[tuple[MemoryNode, float, str]]:
+        query: str = "",
+    ) -> list[tuple[MemoryNode, float, str, float]]:
         """
         Pure in-memory scoring (best-matching message per node).
         Returns sorted (node, score, best message text) triples, best first.
         """
-        import numpy as np
+        from cce_core.retrieval.retriever import rank_in_memory
 
-        if not nodes:
-            return []
-
-        from cce_core.retrieval.retriever import node_similarity
-
-        qvec = query_emb.astype("float32")
-        scored = [(n, *node_similarity(n, qvec)) for n in nodes]
-        scored.sort(key=lambda x: -x[1])
-        return scored
+        return rank_in_memory(nodes, query_emb.astype("float32"), query, self.config)

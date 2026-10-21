@@ -25,6 +25,7 @@ import numpy as np
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
 from cce_core.embedding import load_embedder
 from cce_core.ingestion.segmenter import Turn
+from cce_core.text import split_sentences
 
 if TYPE_CHECKING:
     pass
@@ -45,6 +46,8 @@ class Chunk:
     micro_summaries: list[str] = field(default_factory=list)
     meso_summary: str = ""
     turn_embeddings: "np.ndarray | None" = None   # one vector per turn, for turn-level retrieval
+    sentence_embeddings: "np.ndarray | None" = None   # one vector per sentence of the long turns
+    sentence_map: list = field(default_factory=list)  # [turn position in chunk, sentence number] per vector
 
     @property
     def start_index(self) -> int:
@@ -257,6 +260,7 @@ class SemanticChunker:
             centroid = centroid / norm
 
         topic_label = _infer_topic_label(turns)
+        sentence_vecs, sentence_map = self._embed_sentences(turns)
 
         return Chunk(
             chunk_id=str(uuid.uuid4()),
@@ -266,7 +270,26 @@ class SemanticChunker:
             created_at=datetime.now(timezone.utc),
             session_id=session_id,
             turn_embeddings=embeddings,
+            sentence_embeddings=sentence_vecs,
+            sentence_map=sentence_map,
         )
+
+    def _embed_sentences(self, turns: list[Turn]):
+        """One vector per sentence for the long turns (see config.sentence_index_min_words)."""
+        cfg = self.config
+        if cfg.sentence_index_min_words <= 0:
+            return None, []
+        items: list[tuple[int, int, str]] = []
+        for i, t in enumerate(turns):
+            if len(t.content.split()) < cfg.sentence_index_min_words:
+                continue
+            sents = split_sentences(t.content)[: cfg.sentence_index_max_per_turn]
+            if len(sents) >= 2:
+                items += [(i, k, s) for k, s in enumerate(sents)]
+        if not items:
+            return None, []
+        vecs = self.embed_texts([s for _, _, s in items])
+        return vecs, [[i, k] for i, k, _ in items]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

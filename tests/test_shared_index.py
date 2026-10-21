@@ -14,7 +14,7 @@ from cce_core.compression.merger import MemoryNode, encode_turn_vecs
 from cce_core.config import CCEConfig
 from cce_core.engine import CCEEngine
 from cce_core.memory.warm_tier import WarmTier
-from cce_core.retrieval.retriever import node_similarity, is_overview_query
+from cce_core.retrieval.retriever import is_overview_query, node_similarity, sentence_similarity
 
 from tests.test_live_sessions import make_config, make_messages
 
@@ -185,22 +185,33 @@ def test_concurrent_writers_and_readers(cfg):
 
 # ── Retrieval results are the same as before the index existed ────────────────
 
-def _reference_ranking(store, retriever, query, top_k, boost=0.2, weight=0.15):
-    """The pre-index algorithm: load every note, score each in Python."""
+def _reference_ranking(store, retriever, query, top_k, boost=0.2):
+    """Score every note in plain Python: best message or sentence + recency, fused with BM25 by rank."""
+    from cce_core.retrieval.bm25 import Bm25, fuse
+    from cce_core.retrieval.retriever import query_terms
+    from cce_core.text import term_counts
+
     qvec = retriever.embed_fn(query).astype(np.float32)
-    kws = retriever._extract_keywords(query)
     nodes = store.warm.get_all(session_id=store.session_id)
     rows = [(n, *node_similarity(n, qvec)) for n in nodes]
     top_end = max(n.turn_end for n, _, _ in rows)
-    out = []
-    for n, sem, text in rows:
-        rec = (n.turn_end / max(top_end, 1)) * boost
-        kw = retriever._keyword_score(n, kws) * weight
-        out.append((n.node_id, sem + rec + kw, text))
+    sentence = np.array([sentence_similarity(n, qvec) for n in nodes], dtype=np.float32)
+    sem = np.fmax(np.array([r[1] for r in rows], dtype=np.float32), sentence * retriever.config.sentence_discount)
+    dense = np.array([s + (n.turn_end / max(top_end, 1)) * boost for (n, _, _), s in zip(rows, sem)], dtype=np.float32)
+    extra = []
+    bm25 = Bm25()
+    for n in nodes:
+        bm25.add(n.metadata.get("tf") or term_counts(f"{n.topic_label} {n.meso_summary}"))
+    q_terms = query_terms(query, retriever.config)
+    if q_terms:
+        lexical = bm25.score(q_terms, retriever.config.lexical_max_df)
+        extra.append((lexical, lexical > 0, retriever.config.lexical_weight))
+    fused = fuse(dense, *extra, k=retriever.config.rrf_k)
+    out = [(n.node_id, float(f), text, n.turn_start) for (n, _, text), f in zip(rows, fused)]
     if is_overview_query(query):
-        return [(i, s, t) for (i, s, t), n in sorted(zip(out, [r[0] for r in rows]), key=lambda p: p[1].turn_start)]
-    out.sort(key=lambda r: -r[1])
-    return out[:top_k]
+        return [(i, s, t) for i, s, t, _ in sorted(out, key=lambda r: r[3])]
+    out.sort(key=lambda r: (-r[1], r[3]))
+    return [(i, s, t) for i, s, t, _ in out[:top_k]]
 
 
 @pytest.mark.parametrize("query", [
