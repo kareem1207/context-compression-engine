@@ -27,7 +27,7 @@ from cce_core.config import CCEConfig  # noqa: E402
 from cce_core.engine import CCEEngine  # noqa: E402
 from cce_core.ingestion import tokenizer  # noqa: E402
 import dataset_real  # noqa: E402
-from retrieval_recall import present  # noqa: E402
+from retrieval_recall import check_minimums, parse_minimums, present  # noqa: E402
 
 MODES = ["oneshot", "live", "live_restart", "live_crash", "live_buried", "oneshot_buried"]
 
@@ -70,6 +70,8 @@ def main() -> None:
     ap.add_argument("--meso", type=int, default=150)
     ap.add_argument("--embedder", default=None, help="hash for a fast run without the neural model")
     ap.add_argument("--modes", default=",".join(MODES))
+    ap.add_argument("--min", action="append", default=[], metavar="MODE=FRACTION",
+                    help="exit with status 1 if the mode finds fewer facts than this fraction (CI gate); repeatable")
     args = ap.parse_args()
     modes = args.modes.split(",")
 
@@ -116,12 +118,15 @@ def main() -> None:
 
     total_q = args.conversations * args.questions
     print(f"\nFact present in the context ({total_q} questions, chats of about {args.tokens} tokens, embedder={args.embedder or 'neural'})")
+    scores = {}
     for mode in modes:
         h = hits[mode]
         tot = sum(x[0] for x in h.values())
+        scores[mode] = tot / total_q
         n = f"  notes/conv {sum(notes[mode]) / len(notes[mode]):.1f}" if notes[mode] else ""
         print(f"  {mode:<13} {tot}/{total_q} ({tot / total_q:.0%})  lexical {h['lexical'][0]}/{h['lexical'][1]}  "
               f"paraphrase {h['paraphrase'][0]}/{h['paraphrase'][1]}  mean context tokens {round(sum(sizes[mode]) / len(sizes[mode]))}{n}")
+    check_minimums(parse_minimums(args.min), scores)
 
 
 if __name__ == "__main__":
