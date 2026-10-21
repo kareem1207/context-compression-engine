@@ -184,6 +184,8 @@ class CCEEngine:
         identity = {"name": getattr(model, "name", "neural"), "dim": int(model.dim)}
         if identity["name"] == "neural":
             identity["model"] = self.config.embedding_model
+        elif identity["name"] == "onnx":
+            identity["model"] = getattr(model, "model_name", self.config.onnx_model)
         return identity
 
     def _check_embedder(self, store: MemoryStore) -> None:

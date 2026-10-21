@@ -40,6 +40,7 @@ from run_benchmark import INSTRUCTION, ask, is_correct, recent_within_budget  # 
 VARIANTS = {
     "cce": {},
     "cce_hash": {"embedder": "hash"},
+    "cce_onnx": {"embedder": "onnx"},
     "cce_plain": {"detail_summaries": False},
 }
 

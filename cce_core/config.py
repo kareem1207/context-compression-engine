@@ -12,14 +12,17 @@ import os
 @dataclass
 class CCEConfig:
     # ── Embedding model ───────────────────────────────────────────────────────
-    # "auto" uses the neural model if sentence-transformers is installed, otherwise the
-    # dependency-free hashing embedder. Force one with "neural" or "hash" (or CCE_EMBEDDER).
+    # "auto" uses the neural model if sentence-transformers is installed, else the ONNX model if onnxruntime
+    # is installed, otherwise the dependency-free hashing embedder.
+    # Force one with "neural", "onnx" or "hash" (or CCE_EMBEDDER).
     embedder: str = os.getenv("CCE_EMBEDDER", "auto")
     hash_dim: int = 512
     # Hash embeddings score lower than neural ones for the same topic, so they need a lower threshold.
     hash_chunk_similarity_threshold: float = 0.10
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384          # all-MiniLM-L6-v2 output dimension
+    onnx_model: str = "Xenova/paraphrase-multilingual-MiniLM-L12-v2"   # multilingual, int8, 384 dimensions
+    onnx_max_length: int = 256
     embedding_batch_size: int = 32    # how many sentences to embed at once
 
     # ── Semantic chunker ──────────────────────────────────────────────────────
