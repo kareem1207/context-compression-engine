@@ -76,6 +76,9 @@ class RetrieveContextInput(BaseModel):
         default=False,
         description="Include per-turn micro summaries in past context blocks",
     )
+    since: Optional[str] = Field(default=None, description="ISO 8601 moment: only notes and recent turns from then on")
+    until: Optional[str] = Field(default=None, description="ISO 8601 moment: only notes and recent turns up to then")
+    last_turns: Optional[int] = Field(default=None, ge=1, description="only the last N turns of the session and the notes reaching into them")
     explain: bool = Field(
         default=False,
         description="Also return why the context looks as it does: chosen notes and quotes, scores, token budget split, what was dropped",
@@ -139,3 +142,29 @@ class StatelessCompressInput(BaseModel):
         description="Output format: 'messages', 'string', or 'dict'",
         pattern=r"^(messages|string|dict)$",
     )
+
+
+class PinMemoryInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    session_id: SessionId = Field(..., description="Session", min_length=1, max_length=64)
+    action: str = Field(..., description="add | list | edit | remove", pattern=r"^(add|list|edit|remove)$")
+    text: Optional[str] = Field(default=None, max_length=4000, description="text to pin (add) or the new text (edit)")
+    turn: Optional[int] = Field(default=None, ge=0, description="index of a stored turn to pin (add)")
+    pin_id: Optional[str] = Field(default=None, description="the pin to edit or remove")
+
+
+class ForgetMemoryInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    session_id: SessionId = Field(..., description="Session", min_length=1, max_length=64)
+    node_id: Optional[str] = Field(default=None, description="forget this note and the text it covered")
+    start: Optional[int] = Field(default=None, ge=0, description="first turn index to forget")
+    end: Optional[int] = Field(default=None, ge=0, description="last turn index to forget")
+    confirm: bool = Field(default=False, description="must be true: forgetting cannot be undone")
+
+
+class ExportSessionInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    session_id: SessionId = Field(..., description="Session to export", min_length=1, max_length=64)

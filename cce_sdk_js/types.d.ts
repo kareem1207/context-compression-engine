@@ -24,6 +24,39 @@ export interface ContextOptions {
   fmt?: Format;
   /** Also return why the context looks as it does (REST `explain`). */
   explain?: boolean;
+  /** Only notes and recent turns from this moment on (ISO 8601 string). */
+  since?: string;
+  /** Only notes and recent turns up to this moment (ISO 8601 string). */
+  until?: string;
+  /** Only the last N turns of the session and the notes that reach into them. */
+  lastTurns?: number;
+}
+
+export interface Pin {
+  pin_id: string;
+  text: string;
+  source: string | null;
+  created_at: string;
+}
+
+export interface SessionExport {
+  format: "cce-session-export/1";
+  exported_at: string;
+  session_id: string;
+  stats: SessionStats;
+  turns: Array<{ index: number; role: string; content: string; tokens: number; timestamp: string; state: "hot" | "pending" | "done" }>;
+  notes: Array<{
+    node_id: string;
+    topic: string;
+    turns: [number, number];
+    summary: string;
+    message_summaries: string[];
+    tokens_original: number;
+    created_at: string;
+    time: [string, string] | null;
+  }>;
+  pins: Pin[];
+  session_summary: Record<string, unknown> | null;
 }
 
 /** Why a context looks as it does: chosen notes and quotes, scores, the token budget split, what was dropped. */
@@ -113,6 +146,17 @@ export class CCEClient {
   getContext(sessionId: string, query: string, options?: ContextOptions): Promise<ContextResponse>;
   getSummary(sessionId: string): Promise<{ session_id: string; macro_summary: string; node_count: number; topics: string[] }>;
   getStats(sessionId: string): Promise<SessionStats>;
+  exportSession(sessionId: string): Promise<SessionExport>;
+  pin(sessionId: string, options: { text?: string; turn?: number }): Promise<{ pin_id: string }>;
+  listPins(sessionId: string): Promise<Pin[]>;
+  editPin(sessionId: string, pinId: string, text: string): Promise<{ pin_id: string; updated: boolean }>;
+  unpin(sessionId: string, pinId: string): Promise<{ pin_id: string; removed: boolean }>;
+  forget(
+    sessionId: string,
+    options: { nodeId?: string; start?: number; end?: number }
+  ): Promise<{ notes_removed: Array<{ node_id: string; topic: string; turns: [number, number] }>; turns_removed: number }>;
+  editNote(sessionId: string, nodeId: string, options: { topicLabel?: string; mesoSummary?: string }): Promise<{ node_id: string; updated: boolean }>;
+  editTurn(sessionId: string, index: number, content: string): Promise<{ index: number; updated: boolean }>;
   closeSession(sessionId: string, options?: { checkpoint?: boolean }): Promise<{ session_id: string; closed: boolean }>;
   deleteSession(sessionId: string): Promise<{ session_id: string; deleted: boolean }>;
 }

@@ -126,6 +126,108 @@ class MemoryStore:
         with self._lock:
             return self._log.load_all(self.session_id)
 
+    # ── Managing what is remembered ───────────────────────────────────────────
+
+    def pin(self, text: str | None = None, turn: int | None = None) -> str:
+        """Pin a text, or the text of turn `turn`: it is sent with every context for this session."""
+        if (text is None) == (turn is None):
+            raise ValueError("give either text or turn")
+        source = None
+        if turn is not None:
+            found = self._log.texts(self.session_id, [turn])
+            if turn not in found:
+                raise KeyError(f"turn {turn} is not stored (it may have been summarised with keep_raw_turns off)")
+            text, source = found[turn], f"turn:{turn}"
+        text = text.strip()
+        if not text:
+            raise ValueError("nothing to pin")
+        return self.warm.add_pin(self.session_id, text, source)
+
+    def get_pins(self) -> list[dict]:
+        return self.warm.list_pins(self.session_id)
+
+    def edit_pin(self, pin_id: str, text: str) -> bool:
+        return self.warm.update_pin(self.session_id, pin_id, text.strip())
+
+    def unpin(self, pin_id: str) -> bool:
+        return self.warm.delete_pin(self.session_id, pin_id)
+
+    def edit_note(self, node_id: str, topic_label: str | None = None, meso_summary: str | None = None) -> bool:
+        """Correct a note's label or summary (what is sent when the note is retrieved)."""
+        return self.warm.update_note(self.session_id, node_id, topic_label, meso_summary)
+
+    def edit_turn(self, index: int, content: str) -> bool:
+        """
+        Change the stored text of a turn. A recent or pending turn is changed where it is sent; for a turn
+        that is already in a note this changes the original text quotes come from, not the note's summary
+        (use edit_note for that).
+        """
+        content = content.strip()
+        if not content:
+            raise ValueError("use forget to remove a turn")
+        from cce_core.ingestion import tokenizer
+
+        tokens = tokenizer.count(content)
+        with self._lock:
+            if not self._log.update_content(self.session_id, index, content, tokens):
+                return False
+            for turn in self.hot.get_all() + self._pending:
+                if turn.index == index:
+                    turn.content, turn.token_count = content, tokens
+            return True
+
+    def forget(self, node_id: str | None = None, start: int | None = None, end: int | None = None) -> dict:
+        """
+        Forget a note (`node_id`), or everything in turns [start, end]. Recent and pending turns in the range are
+        removed. Memory is forgotten a note at a time: every note that overlaps the range is deleted with the
+        original text it covered, because a note's summary cannot be cut apart.
+        """
+        with self._lock:
+            notes = self.warm.get_by_session(self.session_id)
+            if node_id is not None:
+                victims = [n for n in notes if n.node_id == node_id]
+                if not victims:
+                    raise KeyError(f"no note {node_id!r} in this session")
+                start, end = None, None
+            else:
+                if start is None or end is None or end < start:
+                    raise ValueError("give node_id, or start and end turn indexes")
+                victims = [n for n in notes if n.turn_start <= end and n.turn_end >= start]
+            removed_notes = [{"node_id": n.node_id, "topic": n.topic_label, "turns": [n.turn_start, n.turn_end]} for n in victims]
+            with self.warm.transaction():
+                for n in victims:
+                    self.warm.delete(n.node_id)
+                turns_removed = 0
+                if start is not None:
+                    turns_removed = self._log.delete_range(self.session_id, start, end)
+            if start is not None:
+                self.hot.remove(start, end)
+                self._pending = [t for t in self._pending if not start <= t.index <= end]
+            return {"notes_removed": removed_notes, "turns_removed": turns_removed}
+
+    def export(self) -> dict:
+        """Everything stored for this session as plain data (no vectors): turns, notes, pins, summary."""
+        with self._lock:
+            summary = self.cold.get(self.session_id)
+            notes = self.warm.get_by_session(self.session_id)
+            return {
+                "format": "cce-session-export/1",
+                "exported_at": datetime.now(timezone.utc).isoformat(),
+                "session_id": self.session_id,
+                "stats": self.stats(),
+                "turns": self._log.rows(self.session_id),
+                "notes": [
+                    {
+                        "node_id": n.node_id, "topic": n.topic_label, "turns": [n.turn_start, n.turn_end],
+                        "summary": n.meso_summary, "message_summaries": n.micro_summaries, "tokens_original": n.token_count,
+                        "created_at": n.created_at.isoformat(), "time": n.metadata.get("time"),
+                    }
+                    for n in notes
+                ],
+                "pins": self.get_pins(),
+                "session_summary": summary.to_dict() if summary else None,
+            }
+
     def get_pending_turns(self) -> list[Turn]:
         """Turns that left the hot tier but are not in a memory note yet (oldest first)."""
         with self._lock:

@@ -57,7 +57,8 @@ class CCEConfig:
     meso_max_tokens: int = 200
     macro_max_tokens: int = 400
 
-    # summarizer backend: "extractive" (no LLM needed) | "llm" (calls local LLM)
+    # summarizer backend: "extractive" (no LLM needed, the default, what all benchmarks use) |
+    # "llm" (EXPERIMENTAL: calls an OpenAI-compatible server for every summary; not benchmarked)
     # Extractive summaries favour sentences that carry facts (numbers, names, "our/my ..." statements)
     # over generic ones. Turn off to get the plain sentence-frequency behaviour.
     detail_summaries: bool = True

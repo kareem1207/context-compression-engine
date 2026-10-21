@@ -11,6 +11,7 @@ Phases are wired in progressively:
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
 from cce_core.ingestion.segmenter import Turn, segment, segment_incremental
@@ -22,6 +23,16 @@ from cce_core.retrieval.retriever import Retriever, RetrievalResult
 from cce_core.retrieval.context_builder import ContextBuilder, ContextPayload
 from cce_core.session.manager import SessionManager
 from cce_core.session.stateless import StatelessProcessor, StatelessResult
+
+
+def _in_window(turn, next_index: int, since, until, last_turns) -> bool:
+    """Does a recent turn pass the time filters of a query?"""
+    from cce_core.retrieval.retriever import _epoch
+
+    if last_turns is not None and turn.index < next_index - int(last_turns):
+        return False
+    stamp = _epoch(turn.timestamp)
+    return (since is None or stamp >= _epoch(since)) and (until is None or stamp <= _epoch(until))
 
 
 class EmbedderMismatchError(ValueError):
@@ -288,6 +299,9 @@ class CCEEngine:
         top_k: int | None = None,
         fmt: str = "messages",
         include_micro: bool = False,
+        since: "datetime | None" = None,
+        until: "datetime | None" = None,
+        last_turns: int | None = None,
     ) -> "ContextPayload":
         """
         Full Phase 3 pipeline: retrieve → build context payload.
@@ -308,13 +322,17 @@ class CCEEngine:
             messages = payload.to_messages()
             # → inject messages into llama.cpp / OpenAI API call
         """
-        results = self.retriever.retrieve(store, query, top_k=top_k)
+        results = self.retriever.retrieve(store, query, top_k=top_k, since=since, until=until, last_turns=last_turns)
         hot_turns = store.get_hot_turns()
         pending = store.get_pending_turns()
+        if since is not None or until is not None or last_turns is not None:
+            hot_turns = [t for t in hot_turns if _in_window(t, store.next_index, since, until, last_turns)]
+            pending = [t for t in pending if _in_window(t, store.next_index, since, until, last_turns)]
+        pins = [p["text"] for p in store.get_pins()]
         rank = (lambda turns: self.retriever.rank_turns(turns, query)) if pending else None
 
         if not results:
-            payload = self.context_builder.build_empty(hot_turns, pending, rank)
+            payload = self.context_builder.build_empty(hot_turns, pending, rank, pinned=pins)
         else:
             payload = self.context_builder.build(
                 results=results,
@@ -322,6 +340,7 @@ class CCEEngine:
                 include_micro=include_micro,
                 pending_turns=pending,
                 pending_rank_fn=rank,
+                pinned=pins,
             )
         from cce_core.retrieval.retriever import is_overview_query, query_terms
         payload.explain["query"] = {
@@ -332,6 +351,8 @@ class CCEEngine:
             "embedder": self.embedder_identity(),
             "notes_in_session": store.warm.count(store.session_id),
             "notes_retrieved": len(results),
+            "filters": {k: (v.isoformat() if hasattr(v, "isoformat") else v)
+                        for k, v in (("since", since), ("until", until), ("last_turns", last_turns)) if v is not None},
         }
         return payload
 

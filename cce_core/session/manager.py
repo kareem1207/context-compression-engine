@@ -207,10 +207,17 @@ class SessionManager:
         session_id: str,
         query: str,
         top_k: int | None = None,
+        since=None,
+        until=None,
+        last_turns: int | None = None,
     ):
-        """Same as build_context but returns the full ContextPayload object."""
+        """
+        Same as build_context but returns the full ContextPayload object.
+        `since` / `until` (datetimes) and `last_turns` limit it to notes and recent turns from that period
+        or from the last N turns of the session.
+        """
         store = self.get_or_open(session_id)
-        return self.engine.build_context(store, query, top_k=top_k)
+        return self.engine.build_context(store, query, top_k=top_k, since=since, until=until, last_turns=last_turns)
 
     # ── Checkpoint ────────────────────────────────────────────────────────────
 
@@ -288,6 +295,32 @@ class SessionManager:
             self._registry.pop(session_id, None)
             self._save_registry()
         return True
+
+    # ── Managing what is remembered (see MemoryStore) ─────────────────────────
+
+    def pin(self, session_id: str, text: str | None = None, turn: int | None = None) -> str:
+        return self.get_or_open(session_id).pin(text, turn)
+
+    def list_pins(self, session_id: str) -> list[dict]:
+        return self.get_or_open(session_id).get_pins()
+
+    def edit_pin(self, session_id: str, pin_id: str, text: str) -> bool:
+        return self.get_or_open(session_id).edit_pin(pin_id, text)
+
+    def unpin(self, session_id: str, pin_id: str) -> bool:
+        return self.get_or_open(session_id).unpin(pin_id)
+
+    def edit_note(self, session_id: str, node_id: str, topic_label: str | None = None, meso_summary: str | None = None) -> bool:
+        return self.get_or_open(session_id).edit_note(node_id, topic_label, meso_summary)
+
+    def edit_turn(self, session_id: str, index: int, content: str) -> bool:
+        return self.get_or_open(session_id).edit_turn(index, content)
+
+    def forget(self, session_id: str, node_id: str | None = None, start: int | None = None, end: int | None = None) -> dict:
+        return self.get_or_open(session_id).forget(node_id, start, end)
+
+    def export_session(self, session_id: str) -> dict:
+        return self.get_or_open(session_id).export()
 
     # ── Registry persistence ──────────────────────────────────────────────────
 

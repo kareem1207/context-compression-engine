@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import os
+from datetime import datetime
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -38,6 +39,9 @@ class AddMessagesIn(BaseModel):
 
 class ContextIn(BaseModel):
     explain: bool = False
+    since: Optional[datetime] = Field(default=None, description="only notes and recent turns from this moment on (ISO 8601)")
+    until: Optional[datetime] = Field(default=None, description="only notes and recent turns up to this moment")
+    last_turns: Optional[int] = Field(default=None, ge=1, description="only the last N turns of the session and the notes that reach into them")
     query: str = Field(..., min_length=1, max_length=4000)
     top_k: Optional[int] = Field(default=None, ge=1, le=50)
     fmt: Fmt = "messages"
@@ -97,7 +101,8 @@ def get_context(session_id: str, body: ContextIn, request: Request, explain: boo
     """Context for a query. `?explain=1` (or `"explain": true`) adds which notes and sentences were chosen,
     their scores (dense, recency, BM25), the token budget split and what was dropped."""
     _require(request, session_id)
-    payload = _manager(request).build_context_payload(session_id, body.query, top_k=body.top_k)
+    payload = _manager(request).build_context_payload(
+        session_id, body.query, top_k=body.top_k, since=body.since, until=body.until, last_turns=body.last_turns)
     out = {
         "context": payload.export(body.fmt),
         "token_count": payload.token_count,
@@ -107,6 +112,101 @@ def get_context(session_id: str, body: ContextIn, request: Request, explain: boo
     if explain or body.explain:
         out["explain"] = payload.explain
     return out
+
+
+class PinIn(BaseModel):
+    text: Optional[str] = Field(default=None, max_length=4000, description="text to pin")
+    turn: Optional[int] = Field(default=None, ge=0, description="or the index of a stored turn to pin")
+
+
+class PinTextIn(BaseModel):
+    text: str = Field(..., min_length=1, max_length=4000)
+
+
+class ForgetIn(BaseModel):
+    node_id: Optional[str] = Field(default=None, description="forget this note and the text it covered")
+    start: Optional[int] = Field(default=None, ge=0)
+    end: Optional[int] = Field(default=None, ge=0)
+
+
+class NoteEditIn(BaseModel):
+    topic_label: Optional[str] = Field(default=None, max_length=200)
+    meso_summary: Optional[str] = Field(default=None, max_length=8000)
+
+
+class TurnEditIn(BaseModel):
+    content: str = Field(..., min_length=1, max_length=200_000)
+
+
+def _guard(call):
+    """Turn the store's ValueError / KeyError into 4xx answers."""
+    try:
+        return call()
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0]))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@secured.get("/v1/sessions/{session_id}/export", tags=["memory"])
+def export_session(session_id: str, request: Request):
+    """Everything stored for the session as JSON: turns, notes, pins, session summary, stats (no vectors)."""
+    _require(request, session_id)
+    return _manager(request).export_session(session_id)
+
+
+@secured.get("/v1/sessions/{session_id}/pins", tags=["memory"])
+def list_pins(session_id: str, request: Request):
+    _require(request, session_id)
+    return {"pins": _manager(request).list_pins(session_id)}
+
+
+@secured.post("/v1/sessions/{session_id}/pins", tags=["memory"], status_code=201)
+def add_pin(session_id: str, body: PinIn, request: Request):
+    """Pin a text (or a stored turn): it is sent with every context for this session."""
+    _require(request, session_id)
+    return {"pin_id": _guard(lambda: _manager(request).pin(session_id, body.text, body.turn))}
+
+
+@secured.put("/v1/sessions/{session_id}/pins/{pin_id}", tags=["memory"])
+def edit_pin(session_id: str, pin_id: str, body: PinTextIn, request: Request):
+    _require(request, session_id)
+    if not _manager(request).edit_pin(session_id, pin_id, body.text):
+        raise HTTPException(status_code=404, detail="pin not found")
+    return {"pin_id": pin_id, "updated": True}
+
+
+@secured.delete("/v1/sessions/{session_id}/pins/{pin_id}", tags=["memory"])
+def remove_pin(session_id: str, pin_id: str, request: Request):
+    _require(request, session_id)
+    if not _manager(request).unpin(session_id, pin_id):
+        raise HTTPException(status_code=404, detail="pin not found")
+    return {"pin_id": pin_id, "removed": True}
+
+
+@secured.post("/v1/sessions/{session_id}/forget", tags=["memory"])
+def forget(session_id: str, body: ForgetIn, request: Request):
+    """Forget a note, or turns [start, end]. Every note that overlaps is deleted whole, with the text it covered."""
+    _require(request, session_id)
+    return _guard(lambda: _manager(request).forget(session_id, body.node_id, body.start, body.end))
+
+
+@secured.patch("/v1/sessions/{session_id}/notes/{node_id}", tags=["memory"])
+def edit_note(session_id: str, node_id: str, body: NoteEditIn, request: Request):
+    _require(request, session_id)
+    if body.topic_label is None and body.meso_summary is None:
+        raise HTTPException(status_code=422, detail="give topic_label and/or meso_summary")
+    if not _manager(request).edit_note(session_id, node_id, body.topic_label, body.meso_summary):
+        raise HTTPException(status_code=404, detail="note not found")
+    return {"node_id": node_id, "updated": True}
+
+
+@secured.patch("/v1/sessions/{session_id}/turns/{index}", tags=["memory"])
+def edit_turn(session_id: str, index: int, body: TurnEditIn, request: Request):
+    _require(request, session_id)
+    if not _manager(request).edit_turn(session_id, index, body.content):
+        raise HTTPException(status_code=404, detail="turn not found")
+    return {"index": index, "updated": True}
 
 
 @secured.get("/v1/sessions/{session_id}/summary", tags=["sessions"])

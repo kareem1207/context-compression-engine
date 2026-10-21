@@ -50,6 +50,7 @@ _SYSTEM_NOTE = (
 )
 
 _PAST_HEADER = "=== PAST CONTEXT (compressed) ==="
+_PINNED_HEADER = "=== PINNED (always included) ==="
 _PENDING_HEADER = "=== EARLIER MESSAGES (not summarised yet) ==="
 _RECENT_HEADER = "=== RECENT CONTEXT ==="
 _SEPARATOR = "---"
@@ -76,6 +77,7 @@ class ContextPayload:
     was_truncated: bool = False
     pending_turns: list[Turn] = field(default_factory=list)
     explain: dict = field(default_factory=dict)   # why this payload looks as it does (see ContextBuilder.build)
+    pinned: list[str] = field(default_factory=list)   # texts pinned by the user, sent every time
 
     def to_messages(self) -> list[dict]:
         """
@@ -88,6 +90,10 @@ class ContextPayload:
 
         # System message: note + compressed past
         system_parts = [self.system_note]
+        if self.pinned:
+            system_parts.append("")
+            system_parts.append(_PINNED_HEADER)
+            system_parts.extend(f"- {p}" for p in self.pinned)
         if self.past_blocks:
             system_parts.append("")
             system_parts.append(_PAST_HEADER)
@@ -111,6 +117,11 @@ class ContextPayload:
     def to_string(self) -> str:
         """Export as a single formatted string."""
         parts: list[str] = [self.system_note, ""]
+
+        if self.pinned:
+            parts.append(_PINNED_HEADER)
+            parts.extend(f"- {p}" for p in self.pinned)
+            parts.append("")
 
         if self.past_blocks:
             parts.append(_PAST_HEADER)
@@ -188,6 +199,7 @@ class ContextBuilder:
         include_micro: bool = False,
         pending_turns: list[Turn] | None = None,
         pending_rank_fn=None,
+        pinned: list[str] | None = None,
     ) -> ContextPayload:
         """
         Build the context payload.
@@ -217,6 +229,19 @@ class ContextBuilder:
         recent_tokens = sum(tokenizer.count(t.content) + 4 for t in hot_turns)
         past_budget = budget - system_tokens - recent_tokens - overhead
 
+        # Pinned text is sent every time, before anything else competes for the budget (at most a quarter of it).
+        pins: list[str] = []
+        pin_tokens = 0
+        for text in pinned or []:
+            cost = tokenizer.count(text) + 4
+            if pin_tokens + cost > max(past_budget // 4, 0):
+                break
+            pins.append(text)
+            pin_tokens += cost
+        if pins:
+            pin_tokens += 12                                    # header
+        past_budget -= pin_tokens
+
         # Pending turns come first: they are the only copy of that part of the conversation.
         pending, pending_tokens, pending_cut = self._pack_pending(
             pending_turns or [], past_budget if not results else int(past_budget * 0.6), pending_rank_fn
@@ -231,7 +256,7 @@ class ContextBuilder:
             results, past_budget, include_micro
         )
 
-        total_tokens = system_tokens + recent_tokens + overhead + pending_tokens + sum(
+        total_tokens = system_tokens + recent_tokens + overhead + pending_tokens + pin_tokens + sum(
             tokenizer.count(b) for b in past_blocks
         )
 
@@ -245,6 +270,7 @@ class ContextBuilder:
                 "overhead": overhead,
                 "recent_turns": recent_tokens,
                 "pending_turns": pending_tokens,
+                "pinned": pin_tokens,
                 "past_notes": sum(past_tokens),
                 "total": total_tokens,
             },
@@ -280,6 +306,7 @@ class ContextBuilder:
             was_truncated=was_truncated or pending_cut or recent_cut,
             pending_turns=pending,
             explain=explain,
+            pinned=pins,
         )
 
     def build_stateless(
@@ -301,12 +328,13 @@ class ContextBuilder:
         hot_turns: list[Turn],
         pending_turns: list[Turn] | None = None,
         pending_rank_fn=None,
+        pinned: list[str] | None = None,
     ) -> ContextPayload:
         """
         Build a payload with no past context — just recent turns (and pending ones, if any).
         Used when the warm tier is empty (brand new session).
         """
-        return self.build([], hot_turns, pending_turns=pending_turns, pending_rank_fn=pending_rank_fn)
+        return self.build([], hot_turns, pending_turns=pending_turns, pending_rank_fn=pending_rank_fn, pinned=pinned)
 
     # ── Internal ──────────────────────────────────────────────────────────────
 

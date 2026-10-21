@@ -19,6 +19,7 @@ from tests.test_live_sessions import PLANTED, make_messages  # noqa: E402
 EXPECTED_TOOLS = {
     "cce_ingest_turn", "cce_ingest_history", "cce_retrieve_context", "cce_summarize_session",
     "cce_session_stats", "cce_close_session", "cce_list_sessions", "cce_stateless_compress",
+    "cce_pin_memory", "cce_forget_memory", "cce_export_session",
 }
 
 
@@ -54,6 +55,13 @@ async def scenario(data_dir):
             seen["list"] = await call("cce_list_sessions")
             seen["stateless"] = await call("cce_stateless_compress", messages=msgs,
                                            query="How many invoice retry attempts are allowed?", fmt="string")
+            seen["pin"] = await call("cce_pin_memory", session_id="e2e", action="add", text="the codeword is Marigold")
+            seen["pins"] = await call("cce_pin_memory", session_id="e2e", action="list")
+            seen["pinned_ctx"] = await call("cce_retrieve_context", session_id="e2e", query="unrelated hiking question", fmt="string",
+                                            last_turns=6)
+            seen["export"] = await call("cce_export_session", session_id="e2e")
+            seen["forget_refused"] = await call("cce_forget_memory", session_id="e2e", start=0, end=1)
+            seen["forget"] = await call("cce_forget_memory", session_id="e2e", start=0, end=1, confirm=True)
             seen["close"] = await call("cce_close_session", session_id="e2e", checkpoint=True)
             seen["bad_id"] = await session.call_tool(
                 "cce_ingest_turn", {"params": {"session_id": "../../x", "role": "user", "content": "hi"}})
@@ -72,6 +80,10 @@ def test_every_tool_works_over_stdio(tmp_path):
     assert any(s["session_id"] == "e2e" for s in seen["list"]["sessions"])
     assert PLANTED in seen["stateless"]["context"]
     assert seen["close"]["checkpointed"] is True
+    assert seen["pin"]["pin_id"] and seen["pins"]["pins"][0]["text"] == "the codeword is Marigold"
+    assert "Marigold" in seen["pinned_ctx"]["context"]                       # pinned text rides along with an unrelated question
+    assert len(seen["export"]["turns"]) == len(make_messages()) and seen["export"]["pins"]
+    assert seen["forget_refused"]["status"] == "error" and seen["forget"]["status"] == "ok"
 
     bad = seen["bad_id"]                             # a path-traversal id is refused by the schema
     assert bad.isError or "error" in bad.content[0].text.lower()

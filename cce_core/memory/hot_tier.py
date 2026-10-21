@@ -75,6 +75,16 @@ class HotTier:
             self._buffer.clear()
             self._buffer.extend(turns[-self._buffer.maxlen:])
 
+    def remove(self, start: int, end: int) -> int:
+        """Drop turns whose index is in [start, end]. Returns how many."""
+        with self._lock:
+            keep = [t for t in self._buffer if not start <= t.index <= end]
+            removed = len(self._buffer) - len(keep)
+            self._buffer.clear()
+            self._buffer.extend(keep)
+            self._evicted = [t for t in self._evicted if not start <= t.index <= end]
+            return removed
+
     # ── Read ──────────────────────────────────────────────────────────────────
 
     def get_all(self) -> list[Turn]:

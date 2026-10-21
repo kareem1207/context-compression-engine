@@ -7,16 +7,16 @@ Produces three levels of summary from conversation turns and chunks:
   macro  — one paragraph per session (the full story so far)
 
 Two backends:
-  "extractive" — pure Python, no LLM needed, uses sentence scoring
-  "llm"        — calls local LLM (Gemma 4 via llama.cpp OpenAI-compat API)
-
-The extractive backend is the default and runs fully offline.
-Switch to "llm" in config for higher-quality summaries when the model is up.
+  "extractive" — pure Python, no LLM needed, uses sentence scoring (default; all benchmarks use it)
+  "llm"        — EXPERIMENTAL. Calls an OpenAI-compatible server (llama.cpp, Ollama, ...) for each summary.
+                 It has not been benchmarked: no measurement shows it finds more facts than "extractive",
+                 and every summary costs a model call. If the call fails, "extractive" is used for that summary.
 """
 
 from __future__ import annotations
 
 import re
+import warnings
 from collections import Counter
 from typing import TYPE_CHECKING
 
@@ -96,6 +96,10 @@ def _extractive_summarize(text: str, max_tokens: int) -> str:
     order = {s: i for i, s in enumerate(sentences)}
     selected.sort(key=lambda s: order.get(s, 9999))
     return " ".join(selected)
+
+
+class ExperimentalFeatureWarning(UserWarning):
+    """A feature that works but has no benchmark behind it yet."""
 
 
 # ── LLM backend ───────────────────────────────────────────────────────────────
@@ -209,6 +213,12 @@ class Summarizer:
 
     def __init__(self, config: CCEConfig = DEFAULT_CONFIG):
         self.config = config
+        if config.summarizer_mode == "llm":
+            warnings.warn(
+                "summarizer_mode='llm' is experimental: it has not been benchmarked, adds a model call per summary, "
+                "and falls back to the extractive summariser when the call fails.",
+                ExperimentalFeatureWarning, stacklevel=2,
+            )
 
     def _summarize(self, text: str, max_tokens: int) -> str:
         if self.config.summarizer_mode == "llm":
