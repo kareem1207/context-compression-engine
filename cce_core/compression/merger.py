@@ -25,6 +25,7 @@ import numpy as np
 
 from cce_core.compression.chunker import Chunk
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
+from cce_core.text import term_counts
 
 
 def encode_turn_vecs(vecs: np.ndarray) -> dict:
@@ -39,6 +40,16 @@ def decode_turn_vecs(metadata: dict) -> np.ndarray | None:
     if not tv:
         return None
     return np.frombuffer(base64.b64decode(tv["data"]), dtype=np.float16).astype(np.float32).reshape(-1, tv["dim"])
+
+
+def decode_sentence_vecs(metadata: dict):
+    """(vectors, [[turn position, sentence number], ...]) of a note's sentence index, or None."""
+    meta = metadata or {}
+    if not meta.get("sent_vecs") or not meta.get("sent_map"):
+        return None
+    vecs = np.frombuffer(base64.b64decode(meta["sent_vecs"]["data"]), dtype=np.float16).astype(np.float32)
+    vecs = vecs.reshape(-1, meta["sent_vecs"]["dim"])
+    return (vecs, meta["sent_map"]) if len(vecs) == len(meta["sent_map"]) else None
 
 
 @dataclass
@@ -156,6 +167,16 @@ class Merger:
         if norm > 1e-8:
             emb = emb / norm
 
+        # Text the lexical (BM25) search runs on: the original messages when they are kept, else the summaries.
+        if self.config.keep_raw_turns:
+            body = " ".join(t.content for t in chunk.turns)
+        else:
+            body = " ".join(micros)
+        tf = term_counts(f"{chunk.topic_label} {meso} {body}")
+        sentence_meta = {}
+        if chunk.sentence_embeddings is not None and len(chunk.sentence_map):
+            sentence_meta = {"sent_vecs": encode_turn_vecs(chunk.sentence_embeddings), "sent_map": chunk.sentence_map}
+
         return MemoryNode(
             node_id=str(uuid.uuid4()),
             chunk_id=chunk.chunk_id,
@@ -170,6 +191,8 @@ class Merger:
             created_at=datetime.now(timezone.utc),
             metadata={
                 **chunk.metadata,
+                "tf": tf,
+                **sentence_meta,
                 **({"turn_vecs": encode_turn_vecs(chunk.turn_embeddings)} if chunk.turn_embeddings is not None else {}),
             },
         )
@@ -197,6 +220,24 @@ def merge_nodes(a: MemoryNode, b: MemoryNode, config: CCEConfig = DEFAULT_CONFIG
     va, vb = decode_turn_vecs(a.metadata), decode_turn_vecs(b.metadata)
     if va is not None and vb is not None and va.shape[1] == vb.shape[1]:
         metadata["turn_vecs"] = encode_turn_vecs(np.concatenate([va, vb], axis=0))
+    metadata.pop("sent_vecs", None)
+    metadata.pop("sent_map", None)
+    sa, sb = decode_sentence_vecs(a.metadata), decode_sentence_vecs(b.metadata)
+    shift = len(a.micro_summaries)
+    if sa is not None and sb is not None and sa[0].shape[1] == sb[0].shape[1]:
+        metadata["sent_vecs"] = encode_turn_vecs(np.concatenate([sa[0], sb[0]], axis=0))
+        metadata["sent_map"] = [*sa[1], *([i + shift, k] for i, k in sb[1])]
+        metadata["sent_map"] = [list(m) for m in metadata["sent_map"]]
+    elif sa is not None and sb is None:
+        metadata["sent_vecs"], metadata["sent_map"] = a.metadata["sent_vecs"], a.metadata["sent_map"]
+    elif sb is not None and sa is None:
+        metadata["sent_vecs"] = b.metadata["sent_vecs"]
+        metadata["sent_map"] = [[i + shift, k] for i, k in sb[1]]
+    tf = dict(a.metadata.get("tf") or {})
+    for term, n in (b.metadata.get("tf") or {}).items():
+        tf[term] = tf.get(term, 0) + n
+    if tf:
+        metadata["tf"] = dict(sorted(tf.items(), key=lambda kv: -kv[1])[:600])
     metadata["merged_notes"] = a.metadata.get("merged_notes", 1) + b.metadata.get("merged_notes", 1)
 
     return MemoryNode(

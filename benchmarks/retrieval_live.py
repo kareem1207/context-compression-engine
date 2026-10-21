@@ -32,8 +32,9 @@ from retrieval_recall import check_minimums, parse_minimums, present  # noqa: E4
 MODES = ["oneshot", "live", "live_restart", "live_crash", "live_buried", "oneshot_buried"]
 
 
-def make_cfg(base: Path, hot: int, top_k: int, meso: int, embedder: str | None) -> CCEConfig:
+def make_cfg(base: Path, hot: int, top_k: int, meso: int, embedder: str | None, **options) -> CCEConfig:
     extra = {"embedder": embedder} if embedder else {}
+    extra.update(options)
     return CCEConfig(base_dir=base, hot_tier_max_turns=hot, retrieval_top_k=top_k, meso_max_tokens=meso, **extra)
 
 
@@ -72,8 +73,15 @@ def main() -> None:
     ap.add_argument("--modes", default=",".join(MODES))
     ap.add_argument("--min", action="append", default=[], metavar="MODE=FRACTION",
                     help="exit with status 1 if the mode finds fewer facts than this fraction (CI gate); repeatable")
+    ap.add_argument("--sentence-min-words", type=int, default=None, help="0 switches the sentence index off")
+    ap.add_argument("--lexical-weight", type=float, default=None, help="0 switches BM25 off")
     args = ap.parse_args()
     modes = args.modes.split(",")
+    options = {}
+    if args.sentence_min_words is not None:
+        options["sentence_index_min_words"] = args.sentence_min_words
+    if args.lexical_weight is not None:
+        options["lexical_weight"] = args.lexical_weight
 
     dialogues = dataset_real.load_dialogues()
     hits = {m: {"lexical": [0, 0], "paraphrase": [0, 0]} for m in modes}
@@ -88,7 +96,7 @@ def main() -> None:
         built = {}
         for mode in modes:
             base = Path(tempfile.mkdtemp(prefix=f"cce_live_{mode}_"))
-            cfg = lambda: make_cfg(base, args.hot, args.top_k, args.meso, args.embedder)  # noqa: E731
+            cfg = lambda: make_cfg(base, args.hot, args.top_k, args.meso, args.embedder, **options)  # noqa: E731
             if mode in ("oneshot", "oneshot_buried"):
                 eng = CCEEngine(cfg())
                 built[mode] = ("oneshot", eng.create_stateless_processor(), bury(msgs, qs, fillers) if mode == "oneshot_buried" else msgs)

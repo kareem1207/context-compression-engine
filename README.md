@@ -23,14 +23,14 @@ It runs fully offline by default (no LLM is needed to compress) and plugs into a
    │  COLD  one macro summary per finished session, as JSON files on disk         │
    └───────────────────────────────────────────────────────────────────────────────┘
               ▲
- user query ──┴─► retrieve (similarity + recency + keyword bonus) ──► context payload ──► your LLM
+ user query ──┴─► retrieve (similarity + recency, fused with BM25) ──► context payload ──► your LLM
 ```
 
 1. **Ingestion** splits raw messages into turns and counts tokens.
 2. **Semantic chunking** embeds the turns (`all-MiniLM-L6-v2`) and starts a new chunk when the topic shifts (cosine similarity under a threshold, with min/max chunk sizes).
 3. **Hierarchical summarising** writes three levels: *micro* (one sentence per turn), *meso* (2 to 4 sentences per topic chunk) and *macro* (one paragraph per session). The default extractive summariser needs no model; an optional `llm` mode calls any OpenAI-compatible local server such as llama.cpp.
 4. **Memory store** keeps recent turns verbatim (hot), topic chunks with embeddings in SQLite (warm), and a finished-session summary on disk (cold).
-5. **Retrieval** scores warm nodes by *semantic similarity + recency boost + keyword bonus*, and the **context builder** assembles a payload under a hard token cap.
+5. **Retrieval** scores warm nodes by *semantic similarity (best message or sentence) + recency boost*, and fuses that ranking with BM25 over the notes' text when the question contains identifiers, codes, acronyms, names or numbers, and the **context builder** assembles a payload under a hard token cap.
 6. **Sessions** can be *stateful* (persistent, checkpointed, many sessions at once) or *stateless* (compress and retrieve in one call, nothing saved).
 
 ---
@@ -215,6 +215,8 @@ All tunables live in [`cce_core/config.py`](https://github.com/kareem1207/contex
 | `cold_tier_max_summaries` | `1000` | session summaries kept on disk; the oldest are deleted beyond this. `0` = unlimited |
 | `live_batch_turns` | `8` | live sessions: compress evicted turns once this many are waiting, in topic-sized notes (`1` = each eviction on its own) |
 | `live_pending_max_turns` / `live_pending_max_tokens` | `24` / `3000` | live sessions: flush the waiting turns even if the last topic is still going |
+| `sentence_index_min_words` / `sentence_discount` | `40` / `0.9` | messages with at least this many words also get one vector per sentence (`0` = off); a sentence's score counts at this fraction against whole-message scores |
+| `lexical_weight` / `lexical_terms` | `1.0` / `distinctive` | weight of the BM25 ranking in the fusion (`0` = dense only); `distinctive` sends only identifiers, codes, acronyms, names and numbers of the question to BM25, `all` sends every non-stopword |
 | `keep_raw_turns` | `true` | keep the original text of compressed turns in the local SQLite file so a topic can quote the exact sentence that answers a question (env `CCE_KEEP_RAW_TURNS=0` turns it off; see [Raw text and privacy](#raw-text-and-privacy)) |
 | `retrieval_top_k` | `5` | nodes retrieved per query |
 | `retrieval_recency_boost` | `0.2` | bonus for recent chunks |
@@ -255,7 +257,7 @@ cd cce_sdk_js && npm test                            # JavaScript: client and of
 
 ## Raw text and privacy
 
-A topic note holds a summary and one short line per message, and a summary drops details: a fact in the third sentence of a long answer may not survive it. So, by default (`keep_raw_turns = true`), CCE also keeps the **original text of every compressed turn** in the `turns` table of the SQLite file `warm.db` in your data folder. When a topic matches a question, CCE scores the sentences of its best-matching messages against the question and quotes the best ones, instead of the one-line summary of the message. This is done at query time for a handful of messages per topic, and sentence vectors are remembered between queries.
+A topic note holds a summary and one short line per message, and a summary drops details: a fact in the third sentence of a long answer may not survive it. So, by default (`keep_raw_turns = true`), CCE also keeps the **original text of every compressed turn** in the `turns` table of the SQLite file `warm.db` in your data folder. When a topic matches a question, CCE scores the sentences of its best-matching messages against the question and quotes the best ones, instead of the one-line summary of the message. Messages of 40 words or more also get one vector per sentence when they are compressed (stored as float16 with the note), so a fact inside a long message is found and quoted on its own; shorter messages are scored at query time and those vectors are remembered between queries.
 
 - **It stays on your machine.** The text is in `<data dir>/warm.db` (default `.cce_data/`), next to the notes that were already there. CCE sends it nowhere; it only reaches a model if it is quoted in a context you then send. The cold-tier JSON summaries are separate and hold no raw text.
 - **Turn it off** with `CCEConfig(keep_raw_turns=False)` or `CCE_KEEP_RAW_TURNS=0`. Turns are then dropped once summarised and quotes fall back to the one-line summaries (details inside longer messages can be lost). Turning it off does not remove text that was already stored.
@@ -284,6 +286,7 @@ A topic note holds a summary and one short line per message, and a summary drops
 - **Compression only kicks in once a topic is longer than the summary budget** (`meso_max_tokens`). Short topics are kept as they are.
 - **The extractive summariser picks sentences; it does not paraphrase.** Use `llm` mode for more fluent summaries when a model is available.
 - **Live sessions keep their state in the same SQLite file.** The last `hot_tier_max_turns` turns, the turns waiting to be compressed, and the turn counters are saved as messages arrive, so a restart or crash picks up where it stopped. Waiting turns are sent to the model verbatim until they are compressed, so nothing falls in a gap. After compression, the original text of each turn stays in the same file unless you turn that off (`keep_raw_turns`, see [Raw text and privacy](#raw-text-and-privacy)).
+- **BM25 is used for exact terms only.** Ids such as `ERR-4021-X` or a UUID, acronyms, names and numbers in a question are matched exactly against the notes and fused with the dense ranking (reciprocal rank). Ordinary lower-case words are not, because exact matching of them added noise to paraphrased questions in our tests (two of 48 were lost). This helps when the dense embedder cannot tell such tokens apart; it does not make the hash embedder understand paraphrases.
 - **Token counts are estimates.** Offline, CCE estimates from words and characters (CJK text, code and JSON count higher than plain English). With the optional `tokens` extra (`tiktoken`) and its vocabulary already cached, counts are exact for `cl100k_base`; CCE never downloads it. Other models tokenize differently. `context_max_tokens` is a cap on this estimate.
 - **Session ids** are 1-64 characters of letters, digits, `_`, `.` and `-` (not `.`, `..` or `index`), in the library, the REST API and the MCP tools, because they become file names in the cold tier.
 - **A data folder remembers its embedder.** The first time a folder is opened, the embedder (name and vector size) is recorded. Opening it later with a different one (`CCE_EMBEDDER`, `hash_dim`, another model) fails with a clear error instead of returning bad matches. Notes hold no raw text, so they cannot be re-embedded; use the original embedder or a new folder.
