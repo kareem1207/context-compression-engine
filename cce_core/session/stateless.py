@@ -115,7 +115,7 @@ class StatelessProcessor:
             top_results = scored[:top_k]
 
         # Build context payload
-        from cce_core.retrieval.retriever import RetrievalResult, node_evidence
+        from cce_core.retrieval.retriever import RetrievalResult, fill_overviews, node_evidence
         by_index = {t.index: t.content for t in turns}
 
         def raw_fn(node, positions):
@@ -138,6 +138,9 @@ class StatelessProcessor:
             )
             for node, score, best_text, fused in top_results
         ]
+
+        if is_overview_query(query):
+            fill_overviews(retrieval_results, raw_fn if self.config.keep_raw_turns else None, self.config)
 
         if not retrieval_results:
             payload = self.builder.build_empty(hot_turns)

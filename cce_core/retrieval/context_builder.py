@@ -221,6 +221,9 @@ class ContextBuilder:
         )
         past_budget -= pending_tokens
 
+        if results and all(r.overview_lines for r in results):
+            self._share_overview_budget(results, past_budget)
+
         # Build past blocks within budget
         past_blocks, included_ids, was_truncated = self._build_past_blocks(
             results, past_budget, include_micro
@@ -267,6 +270,23 @@ class ContextBuilder:
         return self.build([], hot_turns, pending_turns=pending_turns, pending_rank_fn=pending_rank_fn)
 
     # ── Internal ──────────────────────────────────────────────────────────────
+
+    def _share_overview_budget(self, results: list[RetrievalResult], budget: int) -> None:
+        """Every topic of an overview gets a share of the budget: fewer and shorter lines when there are many."""
+        def cost() -> int:
+            return sum(tokenizer.count(self._format_block(r, False)) + 2 for r in results)
+
+        for lines_each in (None, 1):
+            if lines_each:
+                for r in results:
+                    r.overview_lines = r.overview_lines[:lines_each]
+            if cost() <= budget:
+                return
+        for limit in (20, 14, 10, 7):
+            for r in results:
+                r.overview_lines = [tokenizer.truncate_to_tokens(l, limit) for l in r.overview_lines]
+            if cost() <= budget:
+                return
 
     def _fit_recent(self, turns: list[Turn], budget: int) -> tuple[list[Turn], bool]:
         """Keep the newest turns that fit in `budget` tokens; shorten the first one that does not."""
@@ -360,6 +380,8 @@ class ContextBuilder:
         """
         node = result.node
         header = f"[Topic: {node.topic_label}] (turns {node.turn_start}-{node.turn_end})"
+        if result.overview_lines:      # overview question: a few representative sentences, not the summary
+            return "\n".join([header, *(f"- {l}" for l in result.overview_lines), _SEPARATOR])
         lines = [header, node.meso_summary]
 
         # Quote the messages that match the question best when the summary left them out.
