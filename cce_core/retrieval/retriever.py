@@ -15,6 +15,7 @@ It does NOT modify any state.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
@@ -52,6 +53,7 @@ class RetrievalResult:
     composite_score: float     # final ranking score
     best_turn: str = ""        # text of the best-matching message in the node (for quoting)
     evidence: list[str] = field(default_factory=list)   # all strongly matching messages in the node
+    overview_lines: list[str] = field(default_factory=list)   # representative sentences (overview questions only)
 
     @property
     def compressed_text(self) -> str:
@@ -231,6 +233,91 @@ def node_similarity(node: MemoryNode, qvec: np.ndarray) -> tuple[float, str]:
     return max(best, centroid), text
 
 
+def overview_lines(
+    node: MemoryNode,
+    raw_fn: RawFn | None = None,
+    budget_tokens: int = 100,
+    doc_freq: dict[str, int] | None = None,
+    n_notes: int = 1,
+    opener_tokens: int = 60,
+) -> list[str]:
+    """
+    Representative lines of a topic for "what did we talk about?" questions, within `budget_tokens`.
+
+    What the user asked names the subject of a topic better than the answers do, so the first user message
+    of the note is always the first line. The rest of the budget goes to the sentences that cover the most
+    of what is particular to this topic: its terms weighted by how rare they are among the session's notes
+    (tf-idf), picked greedily by new weight per token, so each line adds something the earlier ones did not.
+    Text comes from the original messages when they are kept, else the summary lines. Lines are returned in
+    conversation order.
+    """
+    from cce_core.ingestion import tokenizer
+
+    micros = node.micro_summaries
+    n = len(micros)
+    if n == 0 or budget_tokens <= 0:
+        return []
+    roles = node.metadata.get("roles")
+    has_roles = roles is not None and len(roles) == n
+    first = next((i for i in range(n) if not has_roles or roles[i] == "u"), 0)
+    raw = raw_fn(node, list(range(n))) if raw_fn is not None else {}
+
+    # candidate sentences: (position of the message, sentence)
+    cands: list[tuple[int, str]] = []
+    for pos in range(n):
+        if raw.get(pos):
+            cands += [(pos, s) for s in split_sentences(raw[pos]) if len(s.split()) >= 4]
+        else:
+            cands.append((pos, micros[pos]))
+
+    tf = node.metadata.get("tf") or {}
+    df = doc_freq or {}
+    weight = {term: (count ** 0.5) * math.log(1.0 + n_notes / max(df.get(term, 1), 1)) for term, count in tf.items()}
+
+    lead = raw.get(first) or micros[first]
+    lead = tokenizer.truncate_to_tokens(" ".join(lead.split()), min(opener_tokens, budget_tokens))
+    chosen: list[tuple[int, str]] = [(first, lead)]
+    covered = set(terms(lead))
+    used = tokenizer.count(lead)
+
+    pool = [(pos, " ".join(s.split())) for pos, s in cands]
+    pool = [(pos, tokenizer.truncate_to_tokens(s, 36)) for pos, s in pool]
+    while pool:
+        best_i, best_gain = -1, 0.0
+        for i, (pos, sent) in enumerate(pool):
+            cost = tokenizer.count(sent)
+            if used + cost > budget_tokens:
+                continue
+            gain = sum(weight.get(term, 0.0) for term in set(terms(sent)) - covered) / max(cost, 8)
+            if gain > best_gain:
+                best_i, best_gain = i, gain
+        if best_i < 0:
+            break
+        pos, sent = pool.pop(best_i)
+        chosen.append((pos, sent))
+        used += tokenizer.count(sent)
+        covered |= set(terms(sent))
+    seen, lines = set(), []
+    for pos, sent in sorted(chosen, key=lambda x: x[0]):
+        if sent and sent not in seen:
+            seen.add(sent)
+            lines.append(sent)
+    return lines
+
+
+def fill_overviews(results, raw_fn: RawFn | None, config: CCEConfig) -> None:
+    """Give every result of an overview question its representative lines, sharing the budget between topics."""
+    if not results:
+        return
+    doc_freq: dict[str, int] = {}
+    for r in results:
+        for term in (r.node.metadata.get("tf") or {}):
+            doc_freq[term] = doc_freq.get(term, 0) + 1
+    per_topic = int(min(max(config.context_max_tokens * config.overview_budget_share / len(results), 30), 160))
+    for r in results:
+        r.overview_lines = overview_lines(r.node, raw_fn, per_topic, doc_freq, len(results))
+
+
 def sentence_similarity(node: MemoryNode, qvec: np.ndarray) -> float:
     """Best-matching sentence of the note's long messages, or NaN when it has no sentence vectors."""
     stored = decode_sentence_vecs(node.metadata)
@@ -361,9 +448,10 @@ class Retriever:
                 best_turn=node_similarity(node, qvec)[1],
             ))
 
-        if is_overview_query(query):
-            return results
         raw_fn = getattr(store, "raw_texts", None)
+        if is_overview_query(query):
+            fill_overviews(results, raw_fn, self.config)
+            return results
         for r in results:
             r.evidence = node_evidence(
                 r.node, qvec, raw_fn=raw_fn, embed_many=self.embed_sentences if raw_fn else None
