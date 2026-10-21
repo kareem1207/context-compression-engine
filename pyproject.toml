@@ -37,6 +37,8 @@ all = ["context-compression-engine[neural,onnx,rest,mcp,ui]"]
 cce-rest = "cce_rest.app:main"
 cce-mcp = "cce_mcp.server:main"
 cce-ui = "cce_ui.cli:main"
+cce = "cce_core.cli:main"
+cce-proxy = "cce_proxy.app:main"
 
 [project.urls]
 Homepage = "https://kareem1207.github.io/context-compression-engine/"
@@ -59,7 +61,7 @@ dev = [
 bench = ["pyarrow>=15"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["cce_core", "cce_mcp", "cce_rest", "cce_ui"]
+packages = ["cce_core", "cce_mcp", "cce_rest", "cce_ui", "cce_proxy", "cce_integrations"]
 
 [tool.hatch.build.targets.sdist]
-include = ["cce_core", "cce_mcp", "cce_rest", "cce_ui", "README.md", "LICENSE", "pyproject.toml"]
+include = ["cce_core", "cce_mcp", "cce_rest", "cce_ui", "cce_proxy", "cce_integrations", "README.md", "LICENSE", "pyproject.toml"]

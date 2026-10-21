@@ -24,6 +24,12 @@ Security and packaging
 Details in longer messages
 - A fact buried in a multi-sentence message could be lost once its turn was compressed, because topics only quoted a one-line summary per message. The original text of compressed turns is now kept in SQLite (`turns` table, state `done`), and a matching topic quotes the best-matching sentences of its messages (plus a neighbouring sentence for very short ones). Setting `keep_raw_turns` / `CCE_KEEP_RAW_TURNS=0` turns this off. The data stays on the user's machine and is removed by deleting the session or the data folder; deleting a note removes the text it covered. Databases from 1.0 are upgraded in place (schema 5); their existing notes keep the old behaviour.
 
+Integrations and explain
+- **Fixed: the MCP server could not use its own state.** The tools read `ctx.request_context.lifespan_state`, which does not exist in the MCP SDK (it is `lifespan_context`), so every tool that needed the engine or the session manager answered with an error when the server ran under a real MCP client. The unit tests used a stand-in context with the same wrong attribute, so they passed. A new test starts `cce-mcp` as a subprocess on stdio and calls every tool through the protocol.
+- `cce-proxy`: OpenAI-compatible proxy that trims long chat histories (streaming supported; tool calls and images pass through unchanged).
+- `CCEChatMessageHistory` (LangChain) and `CCEChatMemory` (LlamaIndex); ready MCP config snippets for Claude Desktop, Cursor and VS Code; TypeScript types for explain output and session stats.
+- Explain output on REST (`?explain=1`), MCP (`explain`) and a new `cce inspect` command: chosen notes and quotes, dense / recency / BM25 / fused scores, the token budget split and what was dropped.
+
 Multilingual embedder
 - New `onnx` embedder (`CCE_EMBEDDER=onnx`, extra `onnx`): `paraphrase-multilingual-MiniLM-L12-v2` int8 through onnxruntime, without PyTorch, 50+ languages. `auto` picks it when sentence-transformers is not installed but onnxruntime is. The model is public and is downloaded without sending any stored Hugging Face credentials.
 - Sentences are split after `。！？` and `।`, and Chinese text counts by characters when deciding which messages get a sentence index.

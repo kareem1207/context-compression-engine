@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "cce": {
+      "command": "cce-mcp",
+      "env": {
+        "CCE_DATA_DIR": "C:\\Users\\you\\cce-memory",
+        "CCE_EMBEDDER": "auto"
+      }
+    }
+  }
+}

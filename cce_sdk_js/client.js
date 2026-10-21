@@ -75,8 +75,8 @@ export class CCEClient {
   }
 
   /** Context to send to your LLM right before each call. */
-  getContext(sessionId, query, { topK, fmt = "messages" } = {}) {
-    return this._request("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/context`, { query, top_k: topK, fmt });
+  getContext(sessionId, query, { topK, fmt = "messages", explain = false } = {}) {
+    return this._request("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/context`, { query, top_k: topK, fmt, explain });
   }
 
   getSummary(sessionId) {
