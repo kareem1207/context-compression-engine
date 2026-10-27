@@ -24,6 +24,9 @@ Security and packaging
 Details in longer messages
 - A fact buried in a multi-sentence message could be lost once its turn was compressed, because topics only quoted a one-line summary per message. The original text of compressed turns is now kept in SQLite (`turns` table, state `done`), and a matching topic quotes the best-matching sentences of its messages (plus a neighbouring sentence for very short ones). Setting `keep_raw_turns` / `CCE_KEEP_RAW_TURNS=0` turns this off. The data stays on the user's machine and is removed by deleting the session or the data folder; deleting a note removes the text it covered. Databases from 1.0 are upgraded in place (schema 5); their existing notes keep the old behaviour.
 
+Overview questions
+- "What did we talk about?" is answered with every topic (up to `overview_max_topics`, now 24) in conversation order. Each topic shows its first user message and the sentences that cover the most terms particular to it, within an even share of the token budget (`overview_budget_share`), instead of its extractive summary. Notes record which turns were the user's (`roles`).
+
 Sentence index and BM25
 - Messages of 40 words or more get one vector per sentence at compression time (`sentence_index_min_words`), stored as float16 with the note, so a fact buried in a long message is ranked by its own sentence and quoted without embedding it again at query time. Notes saved by earlier versions keep working.
 - Notes are also indexed for BM25 (term counts stored with the note; from the original messages when `keep_raw_turns` is on, otherwise from the summaries). Identifiers, codes, acronyms, names and numbers of a question are matched exactly and fused with the dense ranking by reciprocal rank; the old ad-hoc keyword bonus is gone. `retrieval_live.py` takes `--sentence-min-words` and `--lexical-weight` to switch the parts off.
