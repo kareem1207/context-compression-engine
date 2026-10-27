@@ -21,6 +21,12 @@ Security and packaging
 - REST CORS allows the `Authorization` and `X-API-Key` headers.
 - `cce_ui` is in the wheel, with a `cce-ui` command; `cce-rest` and `cce-mcp` answer `--help`; `mcp` is limited to `<2` (mcp 2.x broke a clean install of `cce-mcp`); the unused `pyvis` extra is gone. CI builds the wheel and smoke-tests it in a clean venv.
 
+Details in longer messages
+- A fact buried in a multi-sentence message could be lost once its turn was compressed, because topics only quoted a one-line summary per message. The original text of compressed turns is now kept in SQLite (`turns` table, state `done`), and a matching topic quotes the best-matching sentences of its messages (plus a neighbouring sentence for very short ones). Setting `keep_raw_turns` / `CCE_KEEP_RAW_TURNS=0` turns this off. The data stays on the user's machine and is removed by deleting the session or the data folder; deleting a note removes the text it covered. Databases from 1.0 are upgraded in place (schema 5); their existing notes keep the old behaviour.
+
+Session stats
+- `compression_ratio` was `raw / (note tokens + 50 per hot turn)`, a guess that could show 0.41 for a short chat, and the "note tokens" were the raw size of the turns the notes cover. Stats now use the real size of what would be sent (notes as sent + hot and pending turns): new `tokens_sent` and `tokens_saved`, `compression_ratio` is `null` when the session is not smaller than its raw text, `warm_tokens_compressed` is now the size of the notes as sent and `warm_tokens_original` the raw size they cover.
+
 Docs
 - README: roadmap and status updated, and a section on what the benchmarks do and do not show (they predate the live-session fix and have not been re-run).
 

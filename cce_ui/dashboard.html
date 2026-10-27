@@ -1369,12 +1369,12 @@
             document.getElementById('stHot').textContent = s.hot_turns || 0;
             document.getElementById('stRatio').textContent = s.compression_ratio ? s.compression_ratio + 'x' : '—';
             var raw = s.raw_tokens || 0;
-            var comp = s.warm_tokens_compressed || 0;
+            var comp = s.tokens_sent || 0;
             var pct = raw > 0 && comp > 0 ? Math.min(Math.round((comp / raw) * 100), 100) : 0;
             document.getElementById('barFill').style.width = pct + '%';
             document.getElementById('bnRaw').textContent = raw + ' raw';
             document.getElementById('bnComp').textContent = comp + ' compressed';
-            var saved = raw - comp;
+            var saved = s.tokens_saved || 0;
             document.getElementById('bnSaved').textContent = saved > 0 ? saved + ' saved' : '—';
             document.getElementById('sessInfo').innerHTML =
                 'session: ' + (s.session_id || '—') + '<br>cold checkpoint: ' + (s.cold_summary_exists ? 'yes' : 'no') + '<br>opened: ' + (s.opened_at ? s.opened_at.substring(0, 19).replace('T', ' ') : '—');

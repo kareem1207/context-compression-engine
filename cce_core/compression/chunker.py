@@ -137,6 +137,14 @@ class SemanticChunker:
         vec = self.model.encode(text, normalize_embeddings=True)
         return vec.astype(np.float32)
 
+    def embed_texts(self, texts: list[str]) -> np.ndarray:
+        """Embed several texts in one batch (query-time evidence), shape (N, dim) float32."""
+        if not texts:
+            return np.zeros((0, 0), dtype=np.float32)
+        vecs = self.model.encode(texts, batch_size=self.config.embedding_batch_size,
+                                 normalize_embeddings=True, show_progress_bar=False)
+        return np.asarray(vecs, dtype=np.float32)
+
     # ── Internal ──────────────────────────────────────────────────────────────
 
     def _embed_turns(self, turns: list[Turn]) -> np.ndarray:

@@ -77,7 +77,8 @@ CREATE INDEX IF NOT EXISTS idx_turn_start ON memory_nodes (turn_start);
 #   2 = adds memory_nodes.hits (how often a note was retrieved; decides what gets merged first)
 #   3 = adds node_changes + triggers (the change log the shared search index follows)
 #   4 = adds meta (key/value; holds the embedder the notes were made with)
-SCHEMA_VERSION = 4
+#   5 = turns.state 'done' rows (original text of compressed turns) + an index on (session_id, state)
+SCHEMA_VERSION = 5
 
 _CREATE_TURNS = """
 CREATE TABLE IF NOT EXISTS turns (
@@ -218,6 +219,10 @@ class WarmTier:
                     conn.execute(trigger)
             if version < 4:
                 conn.execute(_CREATE_META)
+            if version < 5:
+                # Compressed turns may now stay in `turns` (state 'done'); restoring a session reads
+                # only its 'hot' and 'pending' rows, so look them up by state, not by scanning.
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_turns_state ON turns (session_id, state)")
             conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             conn.commit()
         except BaseException:
@@ -415,10 +420,16 @@ class WarmTier:
     # ── Delete ────────────────────────────────────────────────────────────────
 
     def delete(self, node_id: str) -> bool:
+        """Delete a note together with the kept original text of the turns it covered."""
         with self._lock:
+            row = self._conn.execute(
+                "SELECT session_id, turn_start, turn_end FROM memory_nodes WHERE node_id = ?", (node_id,)
+            ).fetchone()
             cur = self._conn.execute(
                 "DELETE FROM memory_nodes WHERE node_id = ?", (node_id,)
             )
+            if row is not None and row["session_id"]:
+                self.turn_log.drop_done(row["session_id"], row["turn_start"], row["turn_end"])
             self._commit()
         return cur.rowcount > 0
 
@@ -467,6 +478,15 @@ class WarmTier:
         with self._lock:
             row = self._conn.execute("SELECT length(embedding) / 4 FROM memory_nodes LIMIT 1").fetchone()
         return int(row[0]) if row else None
+
+    def note_texts(self, session_id: str) -> list[tuple[str, int, int, str, int]]:
+        """(topic_label, turn_start, turn_end, meso_summary, original token_count) of a session's notes."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT topic_label, turn_start, turn_end, meso_summary, token_count FROM memory_nodes "
+                "WHERE session_id = ? ORDER BY turn_start", (session_id,)
+            ).fetchall()
+        return [tuple(r) for r in rows]
 
     def token_sum(self, session_id: str) -> int:
         """Total token_count of a session's notes, without loading them."""

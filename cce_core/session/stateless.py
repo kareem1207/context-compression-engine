@@ -116,6 +116,14 @@ class StatelessProcessor:
 
         # Build context payload
         from cce_core.retrieval.retriever import RetrievalResult, node_evidence
+        by_index = {t.index: t.content for t in turns}
+
+        def raw_fn(node, positions):
+            if node.turn_end - node.turn_start + 1 != len(node.micro_summaries):
+                return {}
+            return {i: by_index[node.turn_start + i] for i in positions if node.turn_start + i in by_index}
+
+        embed_many = self.engine.retriever.embed_sentences
         retrieval_results = [
             RetrievalResult(
                 node=node,
@@ -124,7 +132,9 @@ class StatelessProcessor:
                 keyword_score=0.0,
                 composite_score=float(score),
                 best_turn=best_text,
-                evidence=[] if is_overview_query(query) else node_evidence(node, query_emb.astype("float32")),
+                evidence=[] if is_overview_query(query) else node_evidence(
+                node, query_emb.astype("float32"),
+                raw_fn=raw_fn if self.config.keep_raw_turns else None, embed_many=embed_many),
             )
             for node, score, best_text in top_results
         ]

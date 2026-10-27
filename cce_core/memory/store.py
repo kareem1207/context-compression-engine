@@ -25,6 +25,7 @@ import numpy as np
 
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
 from cce_core.ids import validate_session_id
+from cce_core.ingestion import tokenizer
 from cce_core.ingestion.segmenter import Turn
 from cce_core.compression.merger import MemoryNode
 from cce_core.memory.hot_tier import HotTier
@@ -108,6 +109,17 @@ class MemoryStore:
     def next_index(self) -> int:
         """Index the next turn of this session should get."""
         return self._next_index
+
+    def raw_texts(self, node: MemoryNode, local_indexes: list[int]) -> dict[int, str]:
+        """
+        Original text of some of a note's turns, keyed by position inside the note (the same position
+        as in node.micro_summaries). Empty for notes saved without raw text.
+        """
+        span = node.turn_end - node.turn_start + 1
+        if span != len(node.micro_summaries):
+            return {}   # positions do not line up with turn indexes (cannot happen for notes CCE wrote itself)
+        found = self._log.texts(node.session_id or self.session_id, [node.turn_start + i for i in local_indexes])
+        return {i: found[node.turn_start + i] for i in local_indexes if node.turn_start + i in found}
 
     def get_pending_turns(self) -> list[Turn]:
         """Turns that left the hot tier but are not in a memory note yet (oldest first)."""
@@ -199,7 +211,7 @@ class MemoryStore:
             done = {t.index for t in consumed}
             with self.warm.transaction():
                 self.warm.upsert_many(nodes)
-                self._log.delete(self.session_id, sorted(done))
+                self._log.retire(self.session_id, sorted(done), self.config.keep_raw_turns)
             self._pending = [t for t in self._pending if t.index not in done]
 
     def ingest_nodes(self, nodes: list[MemoryNode], turns: list | None = None) -> None:
@@ -219,6 +231,8 @@ class MemoryStore:
                 nxt = max((n.turn_end + 1 for n in nodes), default=0)
             with self.warm.transaction():
                 self.warm.upsert_many(nodes)
+                if turns and self.config.keep_raw_turns:
+                    self._log.put(self.session_id, turns, "done")
                 self._log.bump_meta(self.session_id, turns=n_turns, tokens=n_tokens, next_index=nxt)
             self._turn_count += n_turns
             self._raw_token_count += n_tokens
@@ -299,7 +313,7 @@ class MemoryStore:
                 nodes = self.compress_fn(remaining, self.session_id)
             with self.warm.transaction():
                 self.warm.upsert_many(nodes)
-                self._log.delete(self.session_id, [t.index for t in remaining])
+                self._log.retire(self.session_id, [t.index for t in remaining], self.config.keep_raw_turns)
             self.hot.clear()
             self._pending = []
             self._retry_at = 0
@@ -315,7 +329,13 @@ class MemoryStore:
         warm_count = self.warm.count(self.session_id)
         hot_count = self.hot.size()
         cold_exists = self.cold.exists(self.session_id)
-        warm_tokens = self.warm.token_sum(self.session_id)
+        notes = self.warm.note_texts(self.session_id)
+        warm_original = sum(n[4] for n in notes)
+        # what a note costs when it is sent: its label line and summary
+        warm_sent = sum(tokenizer.count(f"[Topic: {n[0]}] (turns {n[1]}-{n[2]})\n{n[3]}") for n in notes)
+        verbatim = sum(t.token_count for t in self.hot.get_all()) + sum(t.token_count for t in self._pending)
+        tokens_sent = warm_sent + verbatim
+        saved = self._raw_token_count - tokens_sent
         return {
             "session_id": self.session_id,
             "turns_ingested": self._turn_count,
@@ -323,11 +343,15 @@ class MemoryStore:
             "hot_turns": hot_count,
             "pending_turns": len(self._pending),
             "warm_nodes": warm_count,
-            "warm_tokens_compressed": warm_tokens,
+            "warm_tokens_original": warm_original,      # raw size of the turns the notes cover
+            "warm_tokens_compressed": warm_sent,        # size of those notes as they are sent
+            "raw_turns_stored": self._log.count(self.session_id, "done"),
+            "tokens_sent": tokens_sent,                 # notes + hot + pending turns: the whole session as sent
+            "tokens_saved": max(saved, 0),
+            # raw / sent, only when the session really is smaller; None otherwise (a short chat that is
+            # not worth compressing yet is not shown as a ratio below 1)
+            "compression_ratio": round(self._raw_token_count / tokens_sent, 2) if tokens_sent and saved > 0 else None,
             "cold_summary_exists": cold_exists,
-            "compression_ratio": round(
-                self._raw_token_count / max(warm_tokens + hot_count * 50, 1), 2
-            ),
             "opened_at": self._opened_at.isoformat(),
         }
 
