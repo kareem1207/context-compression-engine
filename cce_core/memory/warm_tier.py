@@ -1,19 +1,19 @@
 """
 CCE Warm Tier
 SQLite-backed store for MemoryNode objects (compressed topic chunks).
-Embeddings are stored as BLOB and loaded into a NumPy matrix for fast
-ANN (approximate nearest neighbour) search via cosine similarity.
+Embeddings are stored as BLOB. Search runs over a shared in-memory index
+(cce_core.memory.index): one per data dir, keyed by session, kept current from
+SQLite (PRAGMA data_version + a change log), so several WarmTier objects, or
+several processes, see each other's writes.
 
 Schema:
     memory_nodes table — one row per MemoryNode
     Each row stores: metadata columns + embedding BLOB + summary text
 
-ANN Strategy:
-    For up to ~500 nodes (warm_tier_max_chunks default), brute-force
-    cosine similarity over a NumPy matrix is faster than building an
-    index (FAISS/HNSWlib have high startup cost for small corpora).
-    When node count exceeds ~1000, we switch to a chunked matrix search.
-    This keeps the dependency footprint minimal (no FAISS needed).
+Search strategy:
+    Brute-force cosine similarity over NumPy matrices. For hundreds of notes
+    this beats building an ANN index and keeps the dependency footprint small
+    (no FAISS needed).
 
 Thread safety:
     SQLite with check_same_thread=False + a module-level lock.
@@ -34,6 +34,7 @@ import numpy as np
 
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
 from cce_core.compression.merger import MemoryNode, merge_nodes
+from cce_core.memory import index as index_module
 
 
 _CREATE_TABLE = """
@@ -74,7 +75,8 @@ CREATE INDEX IF NOT EXISTS idx_turn_start ON memory_nodes (turn_start);
 #   0 = a 0.1.x database (memory_nodes only) or a brand-new file
 #   1 = adds the `turns` and `session_meta` tables (live-session state survives restarts)
 #   2 = adds memory_nodes.hits (how often a note was retrieved; decides what gets merged first)
-SCHEMA_VERSION = 2
+#   3 = adds node_changes + triggers (the change log the shared search index follows)
+SCHEMA_VERSION = 3
 
 _CREATE_TURNS = """
 CREATE TABLE IF NOT EXISTS turns (
@@ -99,6 +101,23 @@ CREATE TABLE IF NOT EXISTS session_meta (
     raw_tokens   INTEGER NOT NULL
 );
 """
+
+_CREATE_CHANGES = """
+CREATE TABLE IF NOT EXISTS node_changes (
+    seq      INTEGER PRIMARY KEY AUTOINCREMENT,
+    op       TEXT NOT NULL,          -- 'i' = note inserted (or replaced), 'd' = note deleted
+    node_id  TEXT NOT NULL
+);
+"""
+
+_CREATE_TRIGGERS = (
+    """CREATE TRIGGER IF NOT EXISTS memory_nodes_ai AFTER INSERT ON memory_nodes
+       BEGIN INSERT INTO node_changes (op, node_id) VALUES ('i', NEW.node_id); END""",
+    """CREATE TRIGGER IF NOT EXISTS memory_nodes_ad AFTER DELETE ON memory_nodes
+       BEGIN INSERT INTO node_changes (op, node_id) VALUES ('d', OLD.node_id); END""",
+)
+
+_KEEP_CHANGES = 20000   # change-log rows kept; an index that fell further behind reloads instead
 
 logger = logging.getLogger(__name__)
 
@@ -132,12 +151,7 @@ class WarmTier:
         self._init_schema()
         from cce_core.memory.turn_log import TurnLog
         self.turn_log = TurnLog(self)
-
-        # In-memory embedding matrix for fast ANN — rebuilt on load, kept in sync
-        self._node_ids: list[str] = []
-        self._matrix: np.ndarray | None = None   # shape (N, dim)
-        self._matrix_dirty = True
-        self._load_matrix()
+        self.index = index_module.acquire(self._db_path)   # shared by every WarmTier on this data dir
 
     # ── Connection ────────────────────────────────────────────────────────────
 
@@ -155,6 +169,10 @@ class WarmTier:
             self._conn.execute(_CREATE_IDX_TURN)
             self._conn.commit()
             self._migrate()
+            self._conn.execute(
+                "DELETE FROM node_changes WHERE seq <= (SELECT MAX(seq) FROM node_changes) - ?", (_KEEP_CHANGES,)
+            )
+            self._conn.commit()
 
     def _migrate(self):
         """Bring the database up to SCHEMA_VERSION in place. Existing notes are kept."""
@@ -186,6 +204,10 @@ class WarmTier:
                     logger.info("Migrated %s: %d session(s) upgraded to schema 1", self._db_path, migrated)
             if version < 2:
                 conn.execute("ALTER TABLE memory_nodes ADD COLUMN hits INTEGER NOT NULL DEFAULT 0")
+            if version < 3:
+                conn.execute(_CREATE_CHANGES)
+                for trigger in _CREATE_TRIGGERS:
+                    conn.execute(trigger)
             conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             conn.commit()
         except BaseException:
@@ -202,7 +224,6 @@ class WarmTier:
             except BaseException:
                 if self._tx_depth == 1:
                     self._conn.rollback()
-                    self._matrix_dirty = True
                 raise
             else:
                 if self._tx_depth == 1:
@@ -215,53 +236,14 @@ class WarmTier:
         if self._tx_depth == 0:
             self._conn.commit()
 
-    # ── Matrix management ─────────────────────────────────────────────────────
-
-    def _load_matrix(self):
-        """Load all embeddings into RAM as a NumPy matrix for ANN search."""
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT node_id, embedding FROM memory_nodes ORDER BY turn_start"
-            ).fetchall()
-
-        if not rows:
-            self._node_ids = []
-            self._matrix = None
-            self._matrix_dirty = False
-            return
-
-        self._node_ids = [r["node_id"] for r in rows]
-        embeddings = [_blob_to_emb(r["embedding"]) for r in rows]
-        self._matrix = np.stack(embeddings, axis=0)  # (N, dim)
-        self._matrix_dirty = False
-
-    def _rebuild_matrix_if_needed(self):
-        if self._matrix_dirty:
-            self._load_matrix()
-
-    def _append_to_matrix(self, node_id: str, embedding: np.ndarray):
-        """Fast path: append one embedding without full reload."""
-        self._node_ids.append(node_id)
-        emb = embedding.reshape(1, -1).astype(np.float32)
-        if self._matrix is None:
-            self._matrix = emb
-        else:
-            self._matrix = np.vstack([self._matrix, emb])
-
     # ── Write ─────────────────────────────────────────────────────────────────
 
     def upsert(self, node: MemoryNode) -> None:
         """Insert or replace a MemoryNode. Updates in-memory matrix."""
         with self._lock:
             self._conn.execute(_INSERT_NODE, self._node_row(node))
-            merged = self._enforce_limit(node.session_id)
+            self._enforce_limit(node.session_id)
             self._commit()
-
-        # Keep matrix in sync without full reload
-        if merged or node.node_id in self._node_ids:
-            self._matrix_dirty = True   # existing node updated, or notes merged: full rebuild
-        else:
-            self._append_to_matrix(node.node_id, node.embedding)
 
     def upsert_many(self, nodes: list[MemoryNode]) -> None:
         """Batch upsert — much faster than calling upsert() in a loop."""
@@ -272,7 +254,6 @@ class WarmTier:
             for sid in {n.session_id for n in nodes}:
                 self._enforce_limit(sid)
             self._commit()
-        self._matrix_dirty = True  # Rebuild on next search
 
     @staticmethod
     def _node_row(n: MemoryNode) -> tuple:
@@ -384,7 +365,18 @@ class WarmTier:
                 ).fetchall()
         return [self._row_to_node(r) for r in rows]
 
-    # ── ANN Search ────────────────────────────────────────────────────────────
+    def get_many(self, node_ids: list[str]) -> list[MemoryNode]:
+        """Fetch nodes by id in one query, in the order given (missing ids are skipped)."""
+        if not node_ids:
+            return []
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT * FROM memory_nodes WHERE node_id IN ({','.join('?' * len(node_ids))})", node_ids
+            ).fetchall()
+        by_id = {r["node_id"]: self._row_to_node(r) for r in rows}
+        return [by_id[i] for i in node_ids if i in by_id]
+
+    # ── Search ────────────────────────────────────────────────────────────────
 
     def search(
         self,
@@ -406,88 +398,9 @@ class WarmTier:
             List of (MemoryNode, score) tuples, sorted by score descending.
         """
         top_k = top_k or self.config.retrieval_top_k
-        self._rebuild_matrix_if_needed()
-
-        if self._matrix is None or len(self._node_ids) == 0:
-            return []
-
-        qvec = query_embedding.astype(np.float32)
-        if qvec.shape[0] != self._matrix.shape[1]:
-            raise ValueError(
-                f"Stored embeddings have {self._matrix.shape[1]} dimensions but the active embedder produces "
-                f"{qvec.shape[0]}. Use the same embedder (CCE_EMBEDDER) that created these sessions."
-            )
-
-        # If session filter, operate on subset
-        if session_id:
-            return self._search_filtered(qvec, top_k, session_id, recency_boost)
-
-        return self._search_matrix(qvec, top_k, self._node_ids, self._matrix, recency_boost)
-
-    def _search_matrix(
-        self,
-        qvec: np.ndarray,
-        top_k: int,
-        node_ids: list[str],
-        matrix: np.ndarray,
-        recency_boost: float,
-    ) -> list[tuple[MemoryNode, float]]:
-        """Brute-force cosine similarity over the full embedding matrix."""
-        # Cosine similarity: since embeddings are normalized, sim = dot product
-        scores = matrix @ qvec  # shape (N,)
-
-        if recency_boost > 0.0 and len(scores) > 1:
-            # Normalize turn_end across nodes → [0, 1], multiply by boost
-            turn_ends = np.array([
-                self._get_turn_end(nid) for nid in node_ids
-            ], dtype=np.float32)
-            max_te = turn_ends.max()
-            if max_te > 0:
-                recency = turn_ends / max_te
-                scores = scores + recency * recency_boost
-
-        top_k = min(top_k, len(scores))
-        top_indices = np.argpartition(scores, -top_k)[-top_k:]
-        top_indices = top_indices[np.argsort(scores[top_indices])[::-1]]
-
-        results = []
-        for idx in top_indices:
-            node = self.get(node_ids[idx])
-            if node:
-                results.append((node, float(scores[idx])))
-        return results
-
-    def _search_filtered(
-        self,
-        qvec: np.ndarray,
-        top_k: int,
-        session_id: str,
-        recency_boost: float,
-    ) -> list[tuple[MemoryNode, float]]:
-        """Search within a specific session — load subset matrix."""
-        nodes = self.get_by_session(session_id)
-        if not nodes:
-            return []
-        matrix = np.stack([n.embedding for n in nodes], axis=0)
-        scores = matrix @ qvec
-        if recency_boost > 0.0 and len(scores) > 1:
-            turn_ends = np.array([n.turn_end for n in nodes], dtype=np.float32)
-            max_te = turn_ends.max()
-            if max_te > 0:
-                recency = turn_ends / max_te
-                scores = scores + recency * recency_boost
-        top_k = min(top_k, len(scores))
-        top_indices = np.argpartition(scores, -top_k)[-top_k:]
-        top_indices = top_indices[np.argsort(scores[top_indices])[::-1]]
-        return [(nodes[i], float(scores[i])) for i in top_indices]
-
-    def _get_turn_end(self, node_id: str) -> int:
-        """Lightweight fetch of turn_end for recency boost calculation."""
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT turn_end FROM memory_nodes WHERE node_id = ?", (node_id,)
-            ).fetchone()
-        return row["turn_end"] if row else 0
+        hits = self.index.search(query_embedding, top_k, session_id, recency_boost)
+        nodes = {n.node_id: n for n in self.get_many([h[0] for h in hits])}
+        return [(nodes[i], s) for i, s in hits if i in nodes]
 
     # ── Delete ────────────────────────────────────────────────────────────────
 
@@ -497,10 +410,7 @@ class WarmTier:
                 "DELETE FROM memory_nodes WHERE node_id = ?", (node_id,)
             )
             self._commit()
-        if cur.rowcount > 0:
-            self._matrix_dirty = True
-            return True
-        return False
+        return cur.rowcount > 0
 
     def delete_session(self, session_id: str) -> int:
         """Delete all nodes for a session. Returns count deleted."""
@@ -511,8 +421,6 @@ class WarmTier:
             self._conn.execute("DELETE FROM turns WHERE session_id = ?", (session_id,))
             self._conn.execute("DELETE FROM session_meta WHERE session_id = ?", (session_id,))
             self._commit()
-        if cur.rowcount > 0:
-            self._matrix_dirty = True
         return cur.rowcount
 
     # ── Stats ─────────────────────────────────────────────────────────────────
@@ -530,7 +438,17 @@ class WarmTier:
                 ).fetchone()
         return row[0]
 
+    def token_sum(self, session_id: str) -> int:
+        """Total token_count of a session's notes, without loading them."""
+        with self._lock:
+            return self._conn.execute(
+                "SELECT COALESCE(SUM(token_count), 0) FROM memory_nodes WHERE session_id = ?", (session_id,)
+            ).fetchone()[0]
+
     def close(self):
+        if self.index is not None:
+            index_module.release(self.index)
+            self.index = None
         self._conn.close()
 
     # ── Internal ──────────────────────────────────────────────────────────────

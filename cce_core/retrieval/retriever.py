@@ -23,21 +23,14 @@ import numpy as np
 
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
 from cce_core.compression.merger import MemoryNode, decode_turn_vecs
+from cce_core.retrieval.keywords import STOPWORDS, WORD_RE, keyword_set
 
 if TYPE_CHECKING:
     from cce_core.memory.store import MemoryStore
 
 
-_WORD_RE = re.compile(r"\b[a-zA-Z]{3,}\b")
-
-_STOPWORDS = {
-    "the", "a", "an", "is", "it", "to", "do", "of", "and", "or",
-    "in", "on", "at", "for", "with", "that", "this", "was", "are",
-    "be", "have", "has", "had", "you", "your", "we", "can", "will",
-    "would", "could", "should", "what", "how", "why", "when", "where",
-    "about", "just", "so", "but", "if", "not", "no", "i", "me", "my",
-    "tell", "explain", "describe", "give", "show", "help",
-}
+_WORD_RE = WORD_RE
+_STOPWORDS = STOPWORDS
 
 
 @dataclass
@@ -176,46 +169,49 @@ class Retriever:
         query_emb = self.embed_fn(query)
         query_keywords = self._extract_keywords(query)
 
-        # Get raw semantic results from warm tier (already recency-boosted at DB level)
         qvec = query_emb.astype(np.float32)
-        nodes = store.warm.get_all(session_id=store.session_id)
-        if nodes and nodes[0].embedding.shape[0] != qvec.shape[0]:
-            raise ValueError(
-                f"Stored embeddings have {nodes[0].embedding.shape[0]} dimensions but the active embedder produces "
-                f"{qvec.shape[0]}. Use the same embedder (CCE_EMBEDDER) that created these sessions."
-            )
-        raw_results = [(n, *node_similarity(n, qvec)) for n in nodes]
-
-        if not raw_results:
+        scores = store.warm.index.session_scores(store.session_id, qvec)
+        if scores is None:
             return []
 
-        max_turn_end = max(n.turn_end for n, _, _ in raw_results)
-
-        results: list[RetrievalResult] = []
-        for node, sem_score, best_text in raw_results:
-            recency = (node.turn_end / max(max_turn_end, 1)) * boost
-            keyword = self._keyword_score(node, query_keywords) * keyword_bonus_weight
-            composite = sem_score + recency + keyword
-
-            results.append(RetrievalResult(
-                node=node,
-                semantic_score=float(sem_score),
-                recency_score=float(recency),
-                keyword_score=float(keyword),
-                composite_score=float(composite),
-                best_turn=best_text,
-            ))
+        # Vectorised composite score = semantic + recency + keyword, no SQL per note.
+        max_turn_end = max(int(scores.turn_end.max()), 1)
+        recency = scores.turn_end / max_turn_end * boost
+        if query_keywords:
+            overlap = np.array([len(query_keywords & kw) for kw in scores.keywords], dtype=np.float32)
+            keyword = overlap / len(query_keywords) * keyword_bonus_weight
+        else:
+            keyword = np.zeros(len(recency), dtype=np.float32)
+        composite = scores.semantic + recency + keyword
 
         if is_overview_query(query):
             # Every topic, in the order they happened (capped), instead of the few closest matches.
-            overview = sorted(results, key=lambda r: r.node.turn_start)[: self.config.overview_max_topics]
-            return overview
-        results.sort(key=lambda r: -r.composite_score)
-        top = results[:top_k]
-        store.warm.record_hits([r.node.node_id for r in top])
-        for r in top:
+            order = np.argsort(scores.turn_start, kind="stable")[: self.config.overview_max_topics]
+        else:
+            # best first; equal scores keep conversation order
+            order = np.lexsort((scores.turn_start, -composite))[:top_k]
+
+        nodes = {n.node_id: n for n in store.warm.get_many([scores.node_ids[i] for i in order])}
+        results: list[RetrievalResult] = []
+        for i in order:
+            node = nodes.get(scores.node_ids[i])
+            if node is None:
+                continue   # deleted since the index was read
+            results.append(RetrievalResult(
+                node=node,
+                semantic_score=float(scores.semantic[i]),
+                recency_score=float(recency[i]),
+                keyword_score=float(keyword[i]),
+                composite_score=float(composite[i]),
+                best_turn=node_similarity(node, qvec)[1],
+            ))
+
+        if is_overview_query(query):
+            return results
+        for r in results:
             r.evidence = node_evidence(r.node, qvec)
-        return top
+        store.warm.record_hits([r.node.node_id for r in results])
+        return results
 
     def rank_turns(self, turns: list, query: str) -> list:
         """Order turns by how well they match the query, best first (used for pending turns)."""
