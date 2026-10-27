@@ -22,8 +22,17 @@ from typing import TYPE_CHECKING, Callable
 import numpy as np
 
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
-from cce_core.compression.merger import MemoryNode, decode_turn_vecs
+from cce_core.compression.merger import MemoryNode, decode_sentence_vecs, decode_turn_vecs
+from cce_core.retrieval.bm25 import Bm25, fuse
 from cce_core.retrieval.keywords import STOPWORDS, WORD_RE, keyword_set
+from cce_core.text import distinctive_terms, term_counts, terms
+
+
+def query_terms(query: str, config) -> list[str]:
+    """The terms of a question that go to BM25 (see config.lexical_terms)."""
+    if config.lexical_weight <= 0:
+        return []
+    return terms(query) if config.lexical_terms == "all" else distinctive_terms(query)
 
 if TYPE_CHECKING:
     from cce_core.memory.store import MemoryStore
@@ -39,7 +48,7 @@ class RetrievalResult:
     node: MemoryNode
     semantic_score: float      # raw cosine similarity
     recency_score: float       # normalized recency contribution
-    keyword_score: float       # keyword overlap bonus
+    keyword_score: float       # BM25 score of the note's text for the query
     composite_score: float     # final ranking score
     best_turn: str = ""        # text of the best-matching message in the node (for quoting)
     evidence: list[str] = field(default_factory=list)   # all strongly matching messages in the node
@@ -99,6 +108,7 @@ def sentence_evidence(
     sims: np.ndarray,
     raw_fn: RawFn,
     embed_many: EmbedManyFn,
+    stored=None,
     max_turns: int = 12,
     max_candidates: int = 40,
     max_sentences: int = 4,
@@ -108,41 +118,67 @@ def sentence_evidence(
     """
     The sentences of a note's own messages that answer the query best.
 
-    The note's per-message vectors rank its messages (`sims`); the original text of the most promising ones is
-    split into sentences (at most `max_candidates`), which are embedded and scored against the query, so a detail buried in a longer
-    message is quoted itself and not the one-line summary of the message. A very short sentence brings its
-    neighbour along. One quote per message, in conversation order; [] when no original text is kept.
+    Long messages carry a vector per sentence, stored with the note (`stored`, see
+    config.sentence_index_min_words): all of them are scored for free, so a fact inside a long message is
+    found even when the message as a whole does not look like the question. Other messages are handled as
+    before: the note's per-message vectors rank them (`sims`), and the sentences of the most promising ones
+    (at most `max_candidates`) are embedded and scored at query time. The original text of the winning
+    sentences comes from `raw_fn`; a very short sentence brings its neighbour along. One quote per
+    message, in conversation order; [] when no original text is kept.
     """
+    scored: list[tuple[float, int, int]] = []      # (score, position of the message, sentence number)
+    covered: set[int] = set()
+    if stored is not None and stored[0].shape[1] == qvec.shape[0]:
+        for score, (pos, k) in zip(stored[0] @ qvec, stored[1]):
+            scored.append((float(score), int(pos), int(k)))
+            covered.add(int(pos))
+
     order = [int(i) for i in np.argsort(-sims)[:max_turns]]
-    texts = raw_fn(node, order)
-    cands: list[tuple[int, int, str]] = []        # (position of the message, sentence number, sentence)
-    per_turn: dict[int, list[str]] = {}
+    texts = raw_fn(node, sorted(set(order) | covered))
+    per_turn: dict[int, list[str]] = {pos: split_sentences(t) for pos, t in texts.items()}
+
+    cands: list[tuple[int, int, str]] = []
     for pos in order:                                   # most promising message first
-        sents = split_sentences(texts.get(pos, ""))
-        if not sents or (cands and len(cands) + len(sents) > max_candidates):
+        sents = per_turn.get(pos)
+        if pos in covered or not sents or (cands and len(cands) + len(sents) > max_candidates):
             continue
-        per_turn[pos] = sents
         cands += [(pos, k, s) for k, s in enumerate(sents)]
-    if not cands:
+    if cands:
+        vecs = embed_many([c[2] for c in cands])
+        if vecs.shape[0] == len(cands) and vecs.shape[1] == qvec.shape[0]:
+            scored += [(float(v), c[0], c[1]) for v, c in zip(vecs @ qvec, cands)]
+
+    # a sentence can only be quoted if its text is known; a long message without kept text is quoted by its summary
+    micros = node.micro_summaries
+    scored = [x for x in scored
+              if (x[1] in per_turn and x[2] < len(per_turn[x[1]])) or (x[1] in covered and x[1] < len(micros))]
+    if not scored:
         return []
-    vecs = embed_many([c[2] for c in cands])
-    if vecs.shape[0] != len(cands) or vecs.shape[1] != qvec.shape[0]:
-        return []
-    scores = vecs @ qvec
-    best = float(scores.max())
+    best = max(x[0] for x in scored)
     if best <= 0.0:
         return []
-    ranked = [i for i in np.argsort(-scores) if scores[i] >= min_ratio * best][:max_sentences]
+    scored.sort(key=lambda x: -x[0])
+    ranked = [x for x in scored if x[0] >= min_ratio * best][: max_sentences * 2]
 
     chosen: dict[int, set[int]] = {}
-    for i in ranked:
-        pos, k, sent = cands[i]
+    for score, pos, k in ranked:
+        if pos not in per_turn:
+            chosen.setdefault(pos, set())       # summary fallback below
+            continue
+        if len(chosen) >= max_sentences and pos not in chosen:
+            continue
         picks = chosen.setdefault(pos, set())
         picks.add(k)
-        if len(sent.split()) < short_words:      # "Yes, that one." means little alone
-            sents = per_turn[pos]
+        sents = per_turn[pos]
+        if len(sents[k].split()) < short_words:      # "Yes, that one." means little alone
             picks.add(k + 1 if k + 1 < len(sents) else max(k - 1, 0))
-    return [" ".join(per_turn[pos][k] for k in sorted(chosen[pos])) for pos in sorted(chosen)]
+    quotes = []
+    for pos in sorted(chosen)[:max_sentences]:
+        if pos in per_turn:
+            quotes.append(" ".join(per_turn[pos][k] for k in sorted(chosen[pos])))
+        else:
+            quotes.append(micros[pos])
+    return quotes
 
 
 def node_evidence(node: MemoryNode, qvec: np.ndarray, max_items: int = 4, min_ratio: float = 0.65,
@@ -160,7 +196,8 @@ def node_evidence(node: MemoryNode, qvec: np.ndarray, max_items: int = 4, min_ra
     if vecs is None or vecs.shape[1] != qvec.shape[0] or len(vecs) == 0:
         return []
     if raw_fn is not None and embed_many is not None:
-        quotes = sentence_evidence(node, qvec, vecs @ qvec, raw_fn, embed_many)
+        quotes = sentence_evidence(node, qvec, vecs @ qvec, raw_fn, embed_many,
+                                   stored=decode_sentence_vecs(node.metadata))
         if quotes:
             return quotes
     sims = vecs @ qvec
@@ -174,9 +211,9 @@ def node_evidence(node: MemoryNode, qvec: np.ndarray, max_items: int = 4, min_ra
 
 def node_similarity(node: MemoryNode, qvec: np.ndarray) -> tuple[float, str]:
     """
-    Similarity of a query to a node, judged by its best-matching message rather than only
-    the topic centroid. A single specific fact inside a long, mixed topic barely moves the
-    centroid, so centroid-only search misses it; the best single message does not.
+    Similarity of a query to a node, judged by its best-matching message (or sentence of a long message)
+    rather than only the topic centroid. A single specific fact inside a long, mixed topic barely moves the
+    centroid, so centroid-only search misses it; the best single message or sentence does not.
 
     Returns (score, text of the best-matching message). Nodes saved before per-turn vectors
     existed fall back to the centroid.
@@ -192,6 +229,37 @@ def node_similarity(node: MemoryNode, qvec: np.ndarray) -> tuple[float, str]:
     micros = node.micro_summaries
     text = micros[i] if i < len(micros) else ""
     return max(best, centroid), text
+
+
+def sentence_similarity(node: MemoryNode, qvec: np.ndarray) -> float:
+    """Best-matching sentence of the note's long messages, or NaN when it has no sentence vectors."""
+    stored = decode_sentence_vecs(node.metadata)
+    if stored is None or stored[0].shape[1] != qvec.shape[0]:
+        return float("nan")
+    return float((stored[0] @ qvec).max())
+
+
+def rank_in_memory(nodes: list[MemoryNode], qvec: np.ndarray, query: str, config: CCEConfig):
+    """
+    Score notes that are not in a database (one-shot mode): dense score fused with BM25 over the notes' text.
+    Returns (node, dense score, text of the best-matching message, fused score) sorted best first.
+    """
+    if not nodes:
+        return []
+    dense_parts = [node_similarity(n, qvec) for n in nodes]
+    sentence = np.array([sentence_similarity(n, qvec) for n in nodes], dtype=np.float32)
+    dense = np.fmax(np.array([d[0] for d in dense_parts], dtype=np.float32), sentence * config.sentence_discount)
+    bm25 = Bm25(config.bm25_k1, config.bm25_b)
+    for n in nodes:
+        bm25.add(n.metadata.get("tf") or term_counts(f"{n.topic_label} {n.meso_summary}"))
+    q_terms = query_terms(query, config)
+    extra = []
+    if q_terms:
+        lexical = bm25.score(q_terms, config.lexical_max_df)
+        extra.append((lexical, lexical > 0, config.lexical_weight))
+    fused = fuse(dense, *extra, k=config.rrf_k)
+    order = np.lexsort((np.arange(len(nodes)), -fused))
+    return [(nodes[i], float(dense[i]), dense_parts[i][1], float(fused[i])) for i in order]
 
 
 class Retriever:
@@ -252,22 +320,24 @@ class Retriever:
         boost = recency_boost if recency_boost is not None else self.config.retrieval_recency_boost
 
         query_emb = self.embed_fn(query)
-        query_keywords = self._extract_keywords(query)
 
         qvec = query_emb.astype(np.float32)
-        scores = store.warm.index.session_scores(store.session_id, qvec)
+        q_terms = query_terms(query, self.config)
+        scores = store.warm.index.session_scores(store.session_id, qvec, q_terms, self.config.lexical_max_df)
         if scores is None:
             return []
 
-        # Vectorised composite score = semantic + recency + keyword, no SQL per note.
+        # Dense score (best message or sentence + recency) fused with BM25 over the notes' text
+        # by reciprocal rank; vectorised, no SQL per note.
         max_turn_end = max(int(scores.turn_end.max()), 1)
         recency = scores.turn_end / max_turn_end * boost
-        if query_keywords:
-            overlap = np.array([len(query_keywords & kw) for kw in scores.keywords], dtype=np.float32)
-            keyword = overlap / len(query_keywords) * keyword_bonus_weight
-        else:
-            keyword = np.zeros(len(recency), dtype=np.float32)
-        composite = scores.semantic + recency + keyword
+        semantic = np.fmax(scores.semantic, scores.sentence * self.config.sentence_discount)
+        dense = semantic + recency
+        lexical = scores.lexical if scores.lexical is not None else np.zeros(len(dense), dtype=np.float32)
+        extra = []
+        if scores.lexical is not None:
+            extra.append((lexical, lexical > 0, self.config.lexical_weight))
+        composite = fuse(dense, *extra, k=self.config.rrf_k)
 
         if is_overview_query(query):
             # Every topic, in the order they happened (capped), instead of the few closest matches.
@@ -284,9 +354,9 @@ class Retriever:
                 continue   # deleted since the index was read
             results.append(RetrievalResult(
                 node=node,
-                semantic_score=float(scores.semantic[i]),
+                semantic_score=float(semantic[i]),
                 recency_score=float(recency[i]),
-                keyword_score=float(keyword[i]),
+                keyword_score=float(lexical[i]),
                 composite_score=float(composite[i]),
                 best_turn=node_similarity(node, qvec)[1],
             ))
