@@ -26,6 +26,7 @@ import json
 import logging
 import sqlite3
 import threading
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -78,7 +79,8 @@ CREATE INDEX IF NOT EXISTS idx_turn_start ON memory_nodes (turn_start);
 #   3 = adds node_changes + triggers (the change log the shared search index follows)
 #   4 = adds meta (key/value; holds the embedder the notes were made with)
 #   5 = turns.state 'done' rows (original text of compressed turns) + an index on (session_id, state)
-SCHEMA_VERSION = 5
+#   6 = pins table; a trigger so edits of a note reach the shared search index
+SCHEMA_VERSION = 6
 
 _CREATE_TURNS = """
 CREATE TABLE IF NOT EXISTS turns (
@@ -125,6 +127,21 @@ CREATE TABLE IF NOT EXISTS meta (
     value  TEXT NOT NULL
 );
 """
+
+_CREATE_PINS = """
+CREATE TABLE IF NOT EXISTS pins (
+    pin_id      TEXT PRIMARY KEY,
+    session_id  TEXT NOT NULL,
+    text        TEXT NOT NULL,
+    source      TEXT,                -- 'turn:<index>' when pinned from a turn
+    created_at  TEXT NOT NULL
+);
+"""
+
+# An edited note must reach the shared index: log it like a replaced note (the index reloads).
+_CREATE_UPDATE_TRIGGER = """CREATE TRIGGER IF NOT EXISTS memory_nodes_au
+   AFTER UPDATE OF topic_label, meso_summary, embedding, metadata, turn_start, turn_end ON memory_nodes
+   BEGIN INSERT INTO node_changes (op, node_id) VALUES ('i', NEW.node_id); END"""
 
 _KEEP_CHANGES = 20000   # change-log rows kept; an index that fell further behind reloads instead
 
@@ -223,6 +240,10 @@ class WarmTier:
                 # Compressed turns may now stay in `turns` (state 'done'); restoring a session reads
                 # only its 'hot' and 'pending' rows, so look them up by state, not by scanning.
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_turns_state ON turns (session_id, state)")
+            if version < 6:
+                conn.execute(_CREATE_PINS)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_pins_session ON pins (session_id)")
+                conn.execute(_CREATE_UPDATE_TRIGGER)
             conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             conn.commit()
         except BaseException:
@@ -441,8 +462,69 @@ class WarmTier:
             )
             self._conn.execute("DELETE FROM turns WHERE session_id = ?", (session_id,))
             self._conn.execute("DELETE FROM session_meta WHERE session_id = ?", (session_id,))
+            self._conn.execute("DELETE FROM pins WHERE session_id = ?", (session_id,))
             self._commit()
         return cur.rowcount
+
+    # ── Pins: text that is always sent ────────────────────────────────────────
+
+    def add_pin(self, session_id: str, text: str, source: str | None = None) -> str:
+        pin_id = uuid.uuid4().hex[:12]
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO pins (pin_id, session_id, text, source, created_at) VALUES (?,?,?,?,?)",
+                (pin_id, session_id, text, source, datetime.now(timezone.utc).isoformat()),
+            )
+            self._commit()
+        return pin_id
+
+    def list_pins(self, session_id: str) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT pin_id, text, source, created_at FROM pins WHERE session_id = ? ORDER BY created_at, pin_id",
+                (session_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def update_pin(self, session_id: str, pin_id: str, text: str) -> bool:
+        with self._lock:
+            cur = self._conn.execute("UPDATE pins SET text = ? WHERE pin_id = ? AND session_id = ?", (text, pin_id, session_id))
+            self._commit()
+        return cur.rowcount > 0
+
+    def delete_pin(self, session_id: str, pin_id: str) -> bool:
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM pins WHERE pin_id = ? AND session_id = ?", (pin_id, session_id))
+            self._commit()
+        return cur.rowcount > 0
+
+    # ── Editing a note ────────────────────────────────────────────────────────
+
+    def update_note(self, session_id: str, node_id: str, topic_label: str | None = None, meso_summary: str | None = None) -> bool:
+        """Change a note's label and/or summary. Its search terms gain the new words; vectors are not recomputed."""
+        from cce_core.text import term_counts
+
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT topic_label, meso_summary, metadata FROM memory_nodes WHERE node_id = ? AND session_id = ?",
+                (node_id, session_id),
+            ).fetchone()
+            if row is None:
+                return False
+            label = topic_label if topic_label is not None else row["topic_label"]
+            summary = meso_summary if meso_summary is not None else row["meso_summary"]
+            metadata = json.loads(row["metadata"])
+            tf = dict(metadata.get("tf") or {})
+            for term, n in term_counts(f"{label} {summary}").items():
+                tf[term] = max(tf.get(term, 0), n)
+            metadata["tf"] = tf
+            metadata["edited"] = True
+            self._conn.execute(
+                "UPDATE memory_nodes SET topic_label = ?, meso_summary = ?, metadata = ? WHERE node_id = ?",
+                (label, summary, json.dumps(metadata), node_id),
+            )
+            self._commit()
+        return True
 
     # ── Stats ─────────────────────────────────────────────────────────────────
 

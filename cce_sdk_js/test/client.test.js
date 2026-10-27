@@ -31,6 +31,28 @@ test("getContext can ask for the explanation", async () => {
   assert.equal(JSON.parse(f.calls[1].init.body).explain, false);
 });
 
+test("memory management calls use the right routes and bodies", async () => {
+  const f = mockFetch(() => ({ body: { pins: [{ pin_id: "p1" }], pin_id: "p1" } }));
+  const c = new CCEClient({ baseUrl: "http://x:1", fetch: f });
+  await c.pin("s", { text: "remember" });
+  assert.deepEqual(await c.listPins("s"), [{ pin_id: "p1" }]);
+  await c.editPin("s", "p1", "new");
+  await c.unpin("s", "p1");
+  await c.forget("s", { start: 2, end: 5 });
+  await c.editNote("s", "n 1", { mesoSummary: "fixed" });
+  await c.editTurn("s", 3, "edited");
+  await c.exportSession("s");
+  await c.getContext("s", "q", { lastTurns: 4, since: "2026-01-01T00:00:00Z" });
+  const seen = f.calls.map((x) => `${x.init.method} ${x.url.replace("http://x:1", "")}`);
+  assert.deepEqual(seen, [
+    "POST /v1/sessions/s/pins", "GET /v1/sessions/s/pins", "PUT /v1/sessions/s/pins/p1", "DELETE /v1/sessions/s/pins/p1",
+    "POST /v1/sessions/s/forget", "PATCH /v1/sessions/s/notes/n%201", "PATCH /v1/sessions/s/turns/3",
+    "GET /v1/sessions/s/export", "POST /v1/sessions/s/context",
+  ]);
+  assert.deepEqual(JSON.parse(f.calls[4].init.body), { start: 2, end: 5 });
+  assert.equal(JSON.parse(f.calls[8].init.body).last_turns, 4);
+});
+
 test("session ids are URL-encoded", async () => {
   const f = mockFetch(() => ({ body: { sessions: [] } }));
   const c = new CCEClient({ fetch: f });

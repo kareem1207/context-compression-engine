@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -39,6 +40,9 @@ from cce_mcp.schema import (
     CloseSessionInput,
     SessionStatsInput,
     StatelessCompressInput,
+    PinMemoryInput,
+    ForgetMemoryInput,
+    ExportSessionInput,
 )
 
 
@@ -221,6 +225,9 @@ async def cce_retrieve_context(params: RetrieveContextInput, ctx: Context) -> st
             params.session_id,
             params.query,
             top_k=params.top_k,
+            since=datetime.fromisoformat(params.since) if params.since else None,
+            until=datetime.fromisoformat(params.until) if params.until else None,
+            last_turns=params.last_turns,
         )
         await ctx.report_progress(0.9, "Building context payload...")
 
@@ -448,6 +455,71 @@ async def cce_stateless_compress(params: StatelessCompressInput, ctx: Context) -
         })
     except Exception as e:
         return _err(f"Stateless compression failed: {e}")
+
+
+# ── Tools: pin / forget / export ──────────────────────────────────────────────
+
+@mcp.tool(
+    name="cce_pin_memory",
+    annotations={"title": "Pin text so it is always sent", "readOnlyHint": False, "destructiveHint": False,
+                 "idempotentHint": False, "openWorldHint": False},
+)
+async def cce_pin_memory(params: PinMemoryInput, ctx: Context) -> str:
+    """Pin a fact (or a stored turn) so every context for the session includes it; list, edit or remove pins.
+
+    Args:
+        params (PinMemoryInput): session_id, action ('add' | 'list' | 'edit' | 'remove'), and text / turn / pin_id as needed.
+    """
+    try:
+        manager = _get_manager(ctx)
+        sid = params.session_id
+        if params.action == "list":
+            return _ok({"session_id": sid, "pins": manager.list_pins(sid)})
+        if params.action == "add":
+            return _ok({"session_id": sid, "pin_id": manager.pin(sid, params.text, params.turn)})
+        if not params.pin_id:
+            return _err("pin_id is required")
+        if params.action == "edit":
+            if not params.text:
+                return _err("text is required")
+            return _ok({"updated": manager.edit_pin(sid, params.pin_id, params.text)})
+        return _ok({"removed": manager.unpin(sid, params.pin_id)})
+    except Exception as e:
+        return _err(f"Pin failed: {e}")
+
+
+@mcp.tool(
+    name="cce_forget_memory",
+    annotations={"title": "Forget a note or a range of turns", "readOnlyHint": False, "destructiveHint": True,
+                 "idempotentHint": False, "openWorldHint": False},
+)
+async def cce_forget_memory(params: ForgetMemoryInput, ctx: Context) -> str:
+    """Forget a note (node_id) or turns start..end of a session, with the original text they covered.
+
+    Notes are forgotten whole: every note overlapping the range is deleted. Cannot be undone, so confirm must be true.
+    """
+    if not params.confirm:
+        return _err("Forgetting cannot be undone: set confirm to true.")
+    try:
+        return _ok(_get_manager(ctx).forget(params.session_id, params.node_id, params.start, params.end))
+    except Exception as e:
+        return _err(f"Forget failed: {e}")
+
+
+@mcp.tool(
+    name="cce_export_session",
+    annotations={"title": "Export everything stored for a session", "readOnlyHint": True, "destructiveHint": False,
+                 "idempotentHint": True, "openWorldHint": False},
+)
+async def cce_export_session(params: ExportSessionInput, ctx: Context) -> str:
+    """Return a session's stored turns, notes, pins and summary as JSON (no vectors)."""
+    try:
+        manager = _get_manager(ctx)
+        if not manager.exists(params.session_id):
+            return _err(f"Session '{params.session_id}' not found")
+        return _ok(manager.export_session(params.session_id))
+    except Exception as e:
+        return _err(f"Export failed: {e}")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

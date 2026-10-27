@@ -118,6 +118,22 @@ class TurnLog:
         else:
             self.delete(session_id, indexes)
 
+    def delete_range(self, session_id: str, start: int, end: int) -> int:
+        """Delete stored turns [start, end] in any state. Returns how many."""
+        with self._warm._lock:
+            cur = self._conn.execute(
+                "DELETE FROM turns WHERE session_id = ? AND idx BETWEEN ? AND ?", (session_id, start, end))
+            self._warm._commit()
+        return cur.rowcount
+
+    def update_content(self, session_id: str, idx: int, content: str, token_count: int) -> bool:
+        with self._warm._lock:
+            cur = self._conn.execute(
+                "UPDATE turns SET content = ?, token_count = ? WHERE session_id = ? AND idx = ?",
+                (content, token_count, session_id, idx))
+            self._warm._commit()
+        return cur.rowcount > 0
+
     def drop_done(self, session_id: str, start: int, end: int) -> None:
         """Delete kept text of compressed turns in [start, end] (their note is gone)."""
         with self._warm._lock:
@@ -143,6 +159,15 @@ class TurnLog:
             return self._conn.execute(
                 "SELECT COUNT(*) FROM turns WHERE session_id = ? AND state = ?", (session_id, state)
             ).fetchone()[0]
+
+    def rows(self, session_id: str) -> list[dict]:
+        """Every stored turn with its state, for export."""
+        with self._warm._lock:
+            rows = self._conn.execute(
+                "SELECT idx, role, content, token_count, timestamp, state FROM turns WHERE session_id = ? ORDER BY idx",
+                (session_id,)).fetchall()
+        return [{"index": r["idx"], "role": r["role"], "content": r["content"], "tokens": r["token_count"],
+                 "timestamp": r["timestamp"], "state": r["state"]} for r in rows]
 
     def load_all(self, session_id: str) -> list[Turn]:
         """Every stored turn of the session in conversation order (compressed ones only if their text is kept)."""

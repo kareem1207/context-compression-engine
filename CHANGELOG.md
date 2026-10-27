@@ -24,6 +24,13 @@ Security and packaging
 Details in longer messages
 - A fact buried in a multi-sentence message could be lost once its turn was compressed, because topics only quoted a one-line summary per message. The original text of compressed turns is now kept in SQLite (`turns` table, state `done`), and a matching topic quotes the best-matching sentences of its messages (plus a neighbouring sentence for very short ones). Setting `keep_raw_turns` / `CCE_KEEP_RAW_TURNS=0` turns this off. The data stays on the user's machine and is removed by deleting the session or the data folder; deleting a note removes the text it covered. Databases from 1.0 are upgraded in place (schema 5); their existing notes keep the old behaviour.
 
+Memory management, time-aware queries, speed numbers
+- Pin text so it is sent with every context (at most a quarter of the budget); edit a note or a stored turn; forget a note or a range of turns (whole notes, with the text they covered); export a session as JSON. On REST, MCP (`cce_pin_memory`, `cce_forget_memory`, `cce_export_session`), the `cce` command (`pin`, `pins`, `unpin`, `forget`, `export`), the JS client and in the library. Schema version 6 adds the pins table and makes edited notes reach the shared search index.
+- `since`, `until` and `last_turns` limit a query to a period or to the last N turns. Notes record the time of their first and last message.
+- `summarizer_mode="llm"` is labelled experimental and warns when selected; it was not benchmarked.
+- Documented that retrieval does not use the cold-tier session summaries.
+- New `benchmarks/performance.py` and a README table: ingestion speed, query latency, database growth and index memory.
+
 Integrations and explain
 - **Fixed: the MCP server could not use its own state.** The tools read `ctx.request_context.lifespan_state`, which does not exist in the MCP SDK (it is `lifespan_context`), so every tool that needed the engine or the session manager answered with an error when the server ran under a real MCP client. The unit tests used a stand-in context with the same wrong attribute, so they passed. A new test starts `cce-mcp` as a subprocess on stdio and calls every tool through the protocol.
 - `cce-proxy`: OpenAI-compatible proxy that trims long chat histories (streaming supported; tool calls and images pass through unchanged).
