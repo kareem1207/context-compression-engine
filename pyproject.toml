@@ -31,6 +31,7 @@ rest = ["fastapi>=0.110", "uvicorn>=0.29", "pydantic>=2.6"]
 mcp = ["mcp>=1.2,<2", "pydantic>=2.6"]
 ui = ["fastapi>=0.110", "uvicorn>=0.29"]
 tokens = ["tiktoken>=0.7"]
+encrypt = ["cryptography>=42"]
 all = ["context-compression-engine[neural,onnx,rest,mcp,ui]"]
 
 [project.scripts]
@@ -53,6 +54,7 @@ dev = [
     "onnxruntime>=1.17",
     "tokenizers>=0.15",
     "huggingface_hub>=0.23",
+    "cryptography>=42",
     "fastapi>=0.110",
     "uvicorn>=0.29",
     "pydantic>=2.6",

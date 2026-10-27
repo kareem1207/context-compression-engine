@@ -34,6 +34,7 @@ from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
+from cce_core.auth import allows, configured_keys, scope_for
 from cce_core.config import CCEConfig
 from cce_core.engine import CCEEngine
 from cce_core.ids import is_valid_session_id
@@ -92,9 +93,15 @@ def create_app(
     app = FastAPI(title="CCE proxy", version="1.0.0", lifespan=lifespan)
 
     def _guard(request: Request):
-        key = os.getenv("CCE_API_KEY")
-        if key and request.headers.get("x-cce-key") != key:
+        """Checks X-CCE-Key when CCE_API_KEY / CCE_API_KEYS is set; the key's session patterns go to request.state.scope."""
+        request.state.scope = None
+        keys = configured_keys()
+        if not keys:
+            return None
+        scope = scope_for(request.headers.get("x-cce-key"), keys)
+        if scope is None:
             return JSONResponse({"error": {"message": "Missing or invalid X-CCE-Key", "type": "auth"}}, status_code=401)
+        request.state.scope = scope
         return None
 
     def _forward_headers(request: Request) -> dict:
@@ -158,6 +165,8 @@ def create_app(
             return JSONResponse({"error": {"message": "Body must be JSON", "type": "invalid_request"}}, status_code=400)
         manager: SessionManager = request.app.state.manager
         sid = session_id_for(request.headers, body)
+        if request.state.scope is not None and not allows(request.state.scope, sid):
+            return JSONResponse({"error": {"message": "This key may not use this session", "type": "forbidden"}}, status_code=403)
         stateful = True
         try:
             forward, info = await run_in_threadpool(_prepare, manager, sid, body)

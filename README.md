@@ -6,7 +6,7 @@ It runs fully offline by default (no LLM is needed to compress) and plugs into a
 
 **[Try the live demo in your browser](https://kareem1207.github.io/context-compression-engine/)**: paste a conversation, see it split into topics, ask a question and compare the context a model would receive with the full history.
 
-> **Status: v1.0.** The core engine, memory tiers, retrieval, sessions, MCP server, REST API, JavaScript client and a live dashboard are implemented and tested. Benchmarks are in [`benchmarks/`](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md). On local models, CCE found facts said long ago with about 90% fewer tokens than resending the chat, and far more often than sending the newest messages that fit. **But a plain search over raw messages does just as well**: CCE tied it on single facts, lists, corrections and "what did we talk about?" questions, and lost to it on lists and overviews until we fixed that. So treat CCE as a convenient, packaged memory layer (sessions, tiers, MCP, REST, JS client), not as better retrieval than ordinary search. Read the limits before relying on it.
+> **Status: v1.0.** The core engine, memory tiers, retrieval, sessions, MCP server, REST API, OpenAI-compatible proxy, JavaScript client, LangChain and LlamaIndex memory, and a live dashboard are implemented and tested. Benchmarks are in [`benchmarks/`](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md), with the version and day next to every number. On local models, CCE found facts said long ago with about 88% fewer tokens than resending the chat, and far more often than sending the newest messages that fit. **But a plain search over raw messages finds single facts just as reliably**: CCE tied it on single facts, lists and corrections. So treat CCE as a convenient, packaged memory layer (sessions that survive restarts, MCP, REST, proxy, memory management, encryption), not as better retrieval than ordinary search. See [when to use CCE and when plain RAG is enough](#when-to-use-cce-and-when-plain-rag-is-enough) and read the limits before relying on it.
 
 ---
 
@@ -216,6 +216,14 @@ Pinned text is sent with every context of the session, before anything else, usi
 
 **Time-aware queries.** `POST /v1/sessions/{id}/context` (and `cce_retrieve_context`, `getContext`) accept `since` and `until` (ISO 8601) and `last_turns`: only notes whose messages fall in that period, or reach into the last N turns, and only recent turns from it. Notes made by older versions have no recorded time and never match a date range.
 
+### Protect the data
+
+**Encryption at rest (optional).** `pip install "context-compression-engine[encrypt]"`, then set `CCE_ENCRYPTION_KEY` to a passphrase before the first run (or `CCEConfig(encryption_key=...)`). Message text, note labels and summaries, the per-note metadata (search terms, vectors of messages and sentences, times), pins and the cold-tier summaries are stored with AES-256-GCM; the key comes from the passphrase with scrypt and a random salt kept in `encryption.json` in the data folder. A folder remembers that it is encrypted: opening it with a wrong or missing passphrase fails with a clear error, and a key never silently encrypts an existing plain folder. To convert one, stop everything that uses it, keep a copy, and run `cce encrypt` (or `cce decrypt` to go back) with the passphrase in the environment.
+
+What it does **not** cover: the single embedding vector of each note (it can reveal roughly what a note is about), turn numbers, token counts, session ids and the session registry; the decrypted notes are held in memory while CCE runs; and a lost passphrase means lost data. Deleted text is overwritten in the database file (`secure_delete`, on by default), but copies in backups, the file system's free space or SSD wear levelling are outside CCE's reach.
+
+**API keys limited to sessions.** `CCE_API_KEY=secret` still gives one key that may use everything. `CCE_API_KEYS="alice-key=user-1,user-2;team-key=team-*;admin-key=*"` gives each key a list of session ids, prefixes ending in `*`, or `*`. A valid key outside its sessions gets 403 for them (whether or not they exist) and does not see them in `GET /v1/sessions`. The same keys work on `cce-proxy` (header `X-CCE-Key`). Calls that touch no session (`/health`, `/v1/compress`) work with any valid key. This separates users who share one server; it is not a replacement for TLS, rate limiting or a gateway in front of a public deployment.
+
 ### See why something was retrieved
 
 `POST /v1/sessions/{id}/context?explain=1` (or `"explain": true`, or `explain=true` on the `cce_retrieve_context` MCP tool) returns, next to the context, which notes and quotes were chosen, their scores (dense, recency, BM25, fused), the token budget split (system note, recent turns, pending turns, notes, overhead) and the notes that were retrieved but dropped to fit. From a terminal:
@@ -280,12 +288,15 @@ cce_core/
   engine.py      CCEEngine: the single entry point
 cce_mcp/         MCP server (stdio) and a small HTTP demo bridge
 cce_rest/        FastAPI REST API
+cce_proxy/       OpenAI-compatible proxy that trims long chats
+cce_integrations/  LangChain chat history and LlamaIndex chat memory
 cce_sdk_js/      JavaScript client (client.js) and offline engine (lite.js), with tests
 cce_ui/          live dashboard
 docs/            the GitHub Pages demo (built together with cce_sdk_js/lite.js)
 examples/        demos and showcases
-tests/           pytest suites for chunker, summariser, memory store, retriever, sessions
-                 and an end-to-end test that needs a local LLM
+benchmarks/      recall, live-session, overview, multilingual, speed and language-model benchmarks
+tests/           pytest suites for the engine, memory, retrieval, sessions, REST, MCP (including a stdio
+                 end-to-end test), proxy, integrations, encryption, and an end-to-end test that needs a local LLM
 ```
 
 ## Tests
@@ -324,14 +335,24 @@ Measured with `benchmarks/performance.py` on AMD64 Family 25 Model 80 Stepping 0
 - Search index memory: 382.9 MB of Python memory for 10,000 synthetic notes (384 dimensions, 6 message vectors and 8 sentence vectors per note; 267.4 MB of that is the vector arrays), database 178.1 MB. The index is loaded once per data folder and grows with the notes of all sessions; `warm_tier_max_chunks` (500 per session) bounds a session.
 - Ingestion with a neural embedder is slow: a few messages per second on this CPU, because every message is embedded for chunking, again for the note, and long messages again per sentence. Queries are fast (the query itself is the only embedding). Bulk-loading a long history with `add_messages` or `/v1/compress` costs the same per message. This is the main speed weakness; it has not been optimised.
 
+## When to use CCE, and when plain RAG is enough
+
+**Plain RAG is enough** when you only need to look up single facts, lists or corrections in messages or documents, with no sessions to keep: in every model-free test CCE and a plain search over the raw messages with the same token budget tied (96/96 facts, 12/12 on each multi-message task; [tables](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md#model-free-results-cce-10-code-2026-10-21)). It is also much cheaper to run: CCE ingests 6 to 9 messages per second with a neural embedder on our laptop, grows the database by 6 to 8 MB per 1,000 messages and holds about 380 MB of search index per 10,000 notes ([numbers](#speed-and-size)).
+
+**CCE is worth it** when:
+- a chat grows longer than the model's window and the old parts must come back at low cost. On DeepSeek-Coder 6.7B, with chats longer than the window, CCE answered 18 of 24 questions (75%) against 3 of 24 (12%) for the newest messages that fit (2026-10-20; [table](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md#deepseek-coder-67b-chats-longer-than-the-window-about-9300-tokens-context-4096-3-conversations-x-8-questions)); when the chat fit, CCE with 681 tokens answered 17 of 24 (71%) against 10 of 24 (42%) for sending all 5,821 tokens;
+- you want the packaging more than the ranking: sessions that survive restarts and crashes, an MCP server, a REST API, an OpenAI-compatible proxy, LangChain and LlamaIndex memory, pins, forgetting, export, encryption at rest, per-session API keys and an explain output for every retrieval;
+- you want an answer to "what did we talk about?" in conversation order (36/60 against 29/60 for plain search on one set of conversations, a tie on a held-out set);
+- you need it to run offline or in Spanish, Hindi or Chinese (the ONNX embedder).
+
 ## What the results do and do not show
 
-- **Live sessions and one-shot mode.** "Live sessions" (the MCP server and the REST sessions) and "one-shot" mode (`/v1/compress`, `full_pipeline`) use the same compression. Before 1.0, live sessions did not group topics: every message that left the recent-turns window became a note of its own. The benchmarks in [`benchmarks/README.md`](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md) were produced with one-shot mode, and before that live-session fix. **They have not been re-run for 1.0.**
-- **Plain search is a strong baseline.** In our tests, a plain search over the raw messages matched CCE on finding single facts. What we measured in CCE's favour is token use, and results against two simpler ways of fitting a chat into a prompt: sending everything, and sending the newest messages that fit.
-- **What we claim**, each from the tables in the [benchmark write-up](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md):
-  - about 90% fewer tokens than resending the chat;
-  - on a 6.7B local model, 79% of questions correct with CCE against 42% when the whole chat was sent ([table](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md#chats-that-fit-the-models-window-about-5300-tokens-context-8192));
-  - on chats longer than the model's window, 75% to 100% correct with CCE against 4% to 6% with the newest messages that fit ([table](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md#chats-longer-than-the-window-about-9300-tokens-context-4096));
+- **Live sessions and one-shot mode.** "Live sessions" (the MCP server and the REST sessions) and "one-shot" mode (`/v1/compress`, `full_pipeline`) use the same compression. Before 1.0, live sessions did not group topics: every message that left the recent-turns window became a note of its own. The model-free benchmarks cover both paths on the 1.0 code (2026-10-21). The language-model tables use one-shot mode and were measured on earlier 1.0 code, as their headings say.
+- **Plain search is a strong baseline.** What we measured in CCE's favour is token use, and results against two simpler ways of fitting a chat into a prompt: sending everything, and sending the newest messages that fit.
+- **What we claim**, each from the tables in the [benchmark write-up](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md), with the version and day given there:
+  - about 88% fewer tokens than resending the whole chat (681 against 5,821 tokens, 2026-10-20);
+  - on a 6.7B local model, 71% of questions correct with CCE against 42% when the whole chat was sent (2026-10-20; 79% against 42% in the 0.1.0 run);
+  - on chats longer than the model's window, 75% correct with CCE against 12% with the newest messages that fit (6.7B model, 2026-10-20), and 100% against 6% on a 4B model (0.1.0 run, not repeated);
   - it runs offline, and it is MIT licensed.
 - **What we do not claim.** Those are small tests (16 to 24 questions per cell) on two local models with planted facts, not a promise about your data or your model. Results depend on the conversation, the embedder and the model. See [what is not tested](https://github.com/kareem1207/context-compression-engine/blob/main/benchmarks/README.md#what-is-not-tested).
 

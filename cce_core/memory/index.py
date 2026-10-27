@@ -143,6 +143,7 @@ class SharedIndex:
         self._seq = 0
         self._version: int | None = None
         self._refs = 0
+        self.cipher = None          # set by the WarmTier that opens the folder (encrypted folders)
 
     # ── Keeping current ───────────────────────────────────────────────────────
 
@@ -198,6 +199,8 @@ class SharedIndex:
 
     def _add(self, row) -> None:
         node_id, session_id, turn_start, turn_end, blob, metadata, label, summary = row
+        if self.cipher is not None:
+            metadata, label, summary = self.cipher.decrypt(metadata), self.cipher.decrypt(label), self.cipher.decrypt(summary)
         emb = np.frombuffer(blob, dtype=np.float32)
         key = session_id or ""
         block = self._blocks.get(key)

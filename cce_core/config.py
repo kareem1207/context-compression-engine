@@ -93,6 +93,12 @@ class CCEConfig:
     retrieval_recency_boost: float = 0.2  # added to score for recent chunks
     context_max_tokens: int = 2048        # hard cap on assembled context payload
 
+    # Overwrite deleted rows in the database file (forgotten notes, deleted sessions) instead of leaving their text in free pages.
+    secure_delete: bool = True
+
+    # ── Encryption at rest (optional extra: encrypt; see cce_core/crypto.py) ──
+    encryption_key: str | None = field(default_factory=lambda: os.getenv("CCE_ENCRYPTION_KEY") or None)
+
     # ── Storage paths ─────────────────────────────────────────────────────────
     base_dir: Path = field(
         default_factory=lambda: Path(os.getenv("CCE_DATA_DIR", ".cce_data"))

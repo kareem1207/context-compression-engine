@@ -8,6 +8,7 @@
   cce export SESSION [--out file.json]     everything stored for the session as JSON
   cce pins SESSION | cce pin SESSION --text "..." | --turn N | cce unpin SESSION PIN_ID
   cce forget SESSION --note NODE_ID --yes | --turns 10-20 --yes
+  cce encrypt | cce decrypt                encrypt / decrypt a data folder in place (passphrase in CCE_ENCRYPTION_KEY)
 
 `inspect`, `export` and `pins` change nothing. The data folder is --data-dir, else CCE_DATA_DIR, else .cce_data.
 """
@@ -163,6 +164,18 @@ def cmd_forget(args) -> int:
     return 0
 
 
+def cmd_crypt(args) -> int:
+    import os
+
+    from cce_core.crypto import convert_folder
+
+    base = Path(args.data_dir or os.getenv("CCE_DATA_DIR", ".cce_data"))
+    counts = convert_folder(base, os.getenv("CCE_ENCRYPTION_KEY"), encrypt=args.command == "encrypt")
+    print(f"{'Encrypted' if args.command == 'encrypt' else 'Decrypted'} {counts['notes']} note(s), {counts['turns']} stored turn(s), "
+          f"{counts['pins']} pin(s) and {counts['cold_files']} cold-tier file(s) in {base}.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="cce", description="Look inside and manage a CCE data folder.")
     sub = ap.add_subparsers(dest="command", required=True)
@@ -189,6 +202,9 @@ def main(argv: list[str] | None = None) -> None:
         if name == "unpin":
             p.add_argument("pin_id")
 
+    for name, text in (("encrypt", "encrypt the data folder in place"), ("decrypt", "decrypt the data folder in place")):
+        sub.add_parser(name, parents=[common], help=text + " (stop everything that uses it first; passphrase in CCE_ENCRYPTION_KEY)")
+
     fg = sub.add_parser("forget", parents=[common], help="forget a note or a range of turns (cannot be undone)")
     fg.add_argument("session")
     fg.add_argument("--note", help="note id (see `cce export`)")
@@ -196,8 +212,9 @@ def main(argv: list[str] | None = None) -> None:
     fg.add_argument("--yes", action="store_true", help="confirm")
     args = ap.parse_args(argv)
     try:
-        code = {"inspect": cmd_inspect, "export": cmd_export, "forget": cmd_forget}.get(args.command, cmd_pins)(args)
-    except ValueError as exc:      # embedder mismatch, bad session id
+        code = {"inspect": cmd_inspect, "export": cmd_export, "forget": cmd_forget,
+                "encrypt": cmd_crypt, "decrypt": cmd_crypt}.get(args.command, cmd_pins)(args)
+    except ValueError as exc:      # embedder mismatch, bad session id, wrong passphrase
         print(f"error: {exc}", file=sys.stderr)
         code = 2
     raise SystemExit(code)
