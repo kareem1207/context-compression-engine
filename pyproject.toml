@@ -29,6 +29,7 @@ neural = ["sentence-transformers>=3.0"]
 rest = ["fastapi>=0.110", "uvicorn>=0.29", "pydantic>=2.6"]
 mcp = ["mcp>=1.2", "pydantic>=2.6"]
 ui = ["fastapi>=0.110", "uvicorn>=0.29", "pyvis>=0.3"]
+tokens = ["tiktoken>=0.7"]
 all = ["context-compression-engine[neural,rest,mcp,ui]"]
 
 [project.scripts]

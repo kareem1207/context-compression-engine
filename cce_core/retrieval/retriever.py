@@ -212,6 +212,7 @@ class Retriever:
             return overview
         results.sort(key=lambda r: -r.composite_score)
         top = results[:top_k]
+        store.warm.record_hits([r.node.node_id for r in top])
         for r in top:
             r.evidence = node_evidence(r.node, qvec)
         return top

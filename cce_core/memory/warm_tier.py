@@ -33,7 +33,7 @@ from pathlib import Path
 import numpy as np
 
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
-from cce_core.compression.merger import MemoryNode
+from cce_core.compression.merger import MemoryNode, merge_nodes
 
 
 _CREATE_TABLE = """
@@ -53,6 +53,14 @@ CREATE TABLE IF NOT EXISTS memory_nodes (
 );
 """
 
+_INSERT_NODE = """
+INSERT OR REPLACE INTO memory_nodes
+(node_id, chunk_id, session_id, topic_label, meso_summary,
+ micro_summaries, turn_start, turn_end, token_count,
+ embedding, created_at, metadata)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+"""
+
 _CREATE_IDX_SESSION = """
 CREATE INDEX IF NOT EXISTS idx_session ON memory_nodes (session_id);
 """
@@ -65,7 +73,8 @@ CREATE INDEX IF NOT EXISTS idx_turn_start ON memory_nodes (turn_start);
 # Database schema version, kept in PRAGMA user_version.
 #   0 = a 0.1.x database (memory_nodes only) or a brand-new file
 #   1 = adds the `turns` and `session_meta` tables (live-session state survives restarts)
-SCHEMA_VERSION = 1
+#   2 = adds memory_nodes.hits (how often a note was retrieved; decides what gets merged first)
+SCHEMA_VERSION = 2
 
 _CREATE_TURNS = """
 CREATE TABLE IF NOT EXISTS turns (
@@ -175,6 +184,8 @@ class WarmTier:
                 migrated = conn.execute("SELECT COUNT(*) FROM session_meta").fetchone()[0]
                 if migrated:
                     logger.info("Migrated %s: %d session(s) upgraded to schema 1", self._db_path, migrated)
+            if version < 2:
+                conn.execute("ALTER TABLE memory_nodes ADD COLUMN hits INTEGER NOT NULL DEFAULT 0")
             conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             conn.commit()
         except BaseException:
@@ -242,65 +253,92 @@ class WarmTier:
     def upsert(self, node: MemoryNode) -> None:
         """Insert or replace a MemoryNode. Updates in-memory matrix."""
         with self._lock:
-            self._conn.execute(
-                """
-                INSERT OR REPLACE INTO memory_nodes
-                (node_id, chunk_id, session_id, topic_label, meso_summary,
-                 micro_summaries, turn_start, turn_end, token_count,
-                 embedding, created_at, metadata)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-                """,
-                (
-                    node.node_id,
-                    node.chunk_id,
-                    node.session_id,
-                    node.topic_label,
-                    node.meso_summary,
-                    json.dumps(node.micro_summaries),
-                    node.turn_start,
-                    node.turn_end,
-                    node.token_count,
-                    _emb_to_blob(node.embedding),
-                    node.created_at.isoformat(),
-                    json.dumps(node.metadata),
-                ),
-            )
+            self._conn.execute(_INSERT_NODE, self._node_row(node))
+            merged = self._enforce_limit(node.session_id)
             self._commit()
 
         # Keep matrix in sync without full reload
-        if node.node_id not in self._node_ids:
-            self._append_to_matrix(node.node_id, node.embedding)
+        if merged or node.node_id in self._node_ids:
+            self._matrix_dirty = True   # existing node updated, or notes merged: full rebuild
         else:
-            # Existing node updated — mark dirty for full rebuild
-            self._matrix_dirty = True
+            self._append_to_matrix(node.node_id, node.embedding)
 
     def upsert_many(self, nodes: list[MemoryNode]) -> None:
         """Batch upsert — much faster than calling upsert() in a loop."""
         if not nodes:
             return
-        rows = [
-            (
-                n.node_id, n.chunk_id, n.session_id, n.topic_label,
-                n.meso_summary, json.dumps(n.micro_summaries),
-                n.turn_start, n.turn_end, n.token_count,
-                _emb_to_blob(n.embedding), n.created_at.isoformat(),
-                json.dumps(n.metadata),
-            )
-            for n in nodes
-        ]
         with self._lock:
-            self._conn.executemany(
-                """
-                INSERT OR REPLACE INTO memory_nodes
-                (node_id, chunk_id, session_id, topic_label, meso_summary,
-                 micro_summaries, turn_start, turn_end, token_count,
-                 embedding, created_at, metadata)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-                """,
-                rows,
-            )
+            self._conn.executemany(_INSERT_NODE, [self._node_row(n) for n in nodes])
+            for sid in {n.session_id for n in nodes}:
+                self._enforce_limit(sid)
             self._commit()
         self._matrix_dirty = True  # Rebuild on next search
+
+    @staticmethod
+    def _node_row(n: MemoryNode) -> tuple:
+        return (
+            n.node_id, n.chunk_id, n.session_id, n.topic_label,
+            n.meso_summary, json.dumps(n.micro_summaries),
+            n.turn_start, n.turn_end, n.token_count,
+            _emb_to_blob(n.embedding), n.created_at.isoformat(),
+            json.dumps(n.metadata),
+        )
+
+    # ── Limit ─────────────────────────────────────────────────────────────────
+
+    def _enforce_limit(self, session_id: str | None) -> bool:
+        """
+        Keep a session at or under config.warm_tier_max_chunks (0 or None = unlimited).
+        Nothing is dropped: the least-retrieved pair of neighbouring notes (oldest first on ties)
+        is fused into one coarser note, until the session fits. The newest notes are left alone.
+        Must be called with the lock held. Returns True if notes were merged.
+        """
+        limit = self.config.warm_tier_max_chunks
+        if not limit or limit < 1 or not session_id:
+            return False
+        rows = self._conn.execute(
+            "SELECT *, hits FROM memory_nodes WHERE session_id = ? ORDER BY turn_start", (session_id,)
+        ).fetchall()
+        if len(rows) <= limit:
+            return False
+        nodes = [self._row_to_node(r) for r in rows]
+        hits = [r["hits"] for r in rows]
+        removed: list[str] = []
+        merges = 0
+        while len(nodes) > limit:
+            n = len(nodes)
+            protect = max(0, min(n - 2, max(1, limit // 4)))   # newest notes stay as they are
+            candidates = range(n - 1 - protect)
+            i = min(
+                candidates,
+                key=lambda i: (hits[i] + hits[i + 1], nodes[i + 1].turn_end - nodes[i].turn_start, i),
+            )
+            fused = merge_nodes(nodes[i], nodes[i + 1], self.config)
+            removed += [nodes[i].node_id, nodes[i + 1].node_id]
+            nodes[i:i + 2] = [fused]
+            hits[i:i + 2] = [hits[i] + hits[i + 1]]
+            merges += 1
+        fused_nodes = [(nd, h) for nd, h in zip(nodes, hits) if nd.metadata.get("merged_notes", 1) > 1]
+        self._conn.executemany("DELETE FROM memory_nodes WHERE node_id = ?", [(i,) for i in removed])
+        for nd, h in fused_nodes:
+            # a note that was fused earlier and again now is written once, under its latest id
+            self._conn.execute(_INSERT_NODE, self._node_row(nd))
+            self._conn.execute("UPDATE memory_nodes SET hits = ? WHERE node_id = ?", (h, nd.node_id))
+        logger.info(
+            "Session %r exceeded warm_tier_max_chunks=%d: merged %d pair(s) of old notes, %d notes left",
+            session_id, limit, merges, len(nodes),
+        )
+        return True
+
+    def record_hits(self, node_ids: list[str]) -> None:
+        """Count a retrieval for each note (the least-retrieved are merged first when over the limit)."""
+        if not node_ids:
+            return
+        with self._lock:
+            self._conn.executemany(
+                "UPDATE memory_nodes SET hits = hits + 1 WHERE node_id = ?", [(i,) for i in node_ids]
+            )
+            self._commit()
 
     # ── Read ──────────────────────────────────────────────────────────────────
 

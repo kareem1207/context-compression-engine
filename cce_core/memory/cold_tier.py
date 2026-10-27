@@ -26,6 +26,7 @@ A MacroSummary contains:
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -36,6 +37,8 @@ from cce_core.ingestion import tokenizer
 
 
 _INDEX_FILE = "index.json"
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -131,8 +134,11 @@ class ColdTier:
                 "compression_ratio": summary.compression_ratio,
                 "topics": summary.topics,
             }
+            dropped = self._enforce_limit()
             self._save_index()
 
+        for sid in dropped:
+            (self._cold_dir / f"{sid}.json").unlink(missing_ok=True)
         return file_path
 
     def write_from_nodes(
@@ -158,6 +164,19 @@ class ColdTier:
         )
         self.write(summary)
         return summary
+
+    def _enforce_limit(self) -> list[str]:
+        """Drop the oldest summaries beyond config.cold_tier_max_summaries (0 or None = unlimited).
+        Must be called with the lock held; returns the dropped session ids."""
+        limit = self.config.cold_tier_max_summaries
+        if not limit or limit < 1 or len(self._index) <= limit:
+            return []
+        oldest_first = sorted(self._index, key=lambda sid: self._index[sid].get("created_at", ""))
+        dropped = oldest_first[: len(self._index) - limit]
+        for sid in dropped:
+            del self._index[sid]
+        logger.info("cold_tier_max_summaries=%d exceeded: dropped %d oldest summary file(s)", limit, len(dropped))
+        return dropped
 
     # ── Read ──────────────────────────────────────────────────────────────────
 

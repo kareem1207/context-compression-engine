@@ -173,3 +173,43 @@ class Merger:
                 **({"turn_vecs": encode_turn_vecs(chunk.turn_embeddings)} if chunk.turn_embeddings is not None else {}),
             },
         )
+
+
+def merge_nodes(a: MemoryNode, b: MemoryNode, config: CCEConfig = DEFAULT_CONFIG) -> MemoryNode:
+    """
+    Fuse two adjacent notes (`a` is the earlier one) into one coarser note: a shorter combined
+    summary, the union of their turns, a weighted centroid. The per-turn summaries and vectors are
+    kept, so single facts inside the merged range can still be found.
+    """
+    from cce_core.compression.summarizer import _extractive_summarize
+
+    na = max(a.turn_end - a.turn_start + 1, 1)
+    nb = max(b.turn_end - b.turn_start + 1, 1)
+    emb = a.embedding * na + b.embedding * nb
+    norm = np.linalg.norm(emb)
+    emb = (emb / norm if norm > 1e-8 else emb).astype(np.float32)
+
+    label = a.topic_label if a.topic_label == b.topic_label else f"{a.topic_label}; {b.topic_label}"
+    if len(label) > 80:
+        label = label[:77].rstrip() + "..."
+
+    metadata = {k: v for k, v in {**a.metadata, **b.metadata}.items() if k != "turn_vecs"}
+    va, vb = decode_turn_vecs(a.metadata), decode_turn_vecs(b.metadata)
+    if va is not None and vb is not None and va.shape[1] == vb.shape[1]:
+        metadata["turn_vecs"] = encode_turn_vecs(np.concatenate([va, vb], axis=0))
+    metadata["merged_notes"] = a.metadata.get("merged_notes", 1) + b.metadata.get("merged_notes", 1)
+
+    return MemoryNode(
+        node_id=str(uuid.uuid4()),
+        chunk_id=a.chunk_id,
+        session_id=a.session_id,
+        embedding=emb,
+        topic_label=label,
+        meso_summary=_extractive_summarize(f"{a.meso_summary} {b.meso_summary}", config.meso_max_tokens),
+        micro_summaries=[*a.micro_summaries, *b.micro_summaries],
+        turn_start=min(a.turn_start, b.turn_start),
+        turn_end=max(a.turn_end, b.turn_end),
+        token_count=a.token_count + b.token_count,
+        created_at=datetime.now(timezone.utc),
+        metadata=metadata,
+    )
