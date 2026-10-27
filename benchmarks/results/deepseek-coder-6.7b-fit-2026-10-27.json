@@ -1,0 +1,1238 @@
+{
+  "label": "deepseek-coder-6.7b-fit-2026-10-27",
+  "mode": "fit",
+  "date": "2026-10-27",
+  "machine": "AMD64 Family 25 Model 80 Stepping 0, AuthenticAMD, Windows",
+  "setup": {
+    "conversations": 3,
+    "questions_per_conversation": 8,
+    "target_tokens": 5000,
+    "window_tokens": null,
+    "hot_tier_max_turns": 4,
+    "retrieval_top_k": 3,
+    "meso_max_tokens": 150,
+    "dataset": "UltraChat 200k (test_sft) filler + randomised planted facts"
+  },
+  "summary": {
+    "full": {
+      "correct": 7,
+      "of": 24,
+      "accuracy": 0.292,
+      "mean_prompt_tokens": 5667,
+      "mean_prompt_eval_seconds": 41.4
+    },
+    "recent": {
+      "correct": 0,
+      "of": 24,
+      "accuracy": 0.0,
+      "mean_prompt_tokens": 709,
+      "mean_prompt_eval_seconds": 14.27
+    },
+    "cce": {
+      "correct": 14,
+      "of": 24,
+      "accuracy": 0.583,
+      "mean_prompt_tokens": 762,
+      "mean_prompt_eval_seconds": 27.06
+    },
+    "cce_hash": {
+      "correct": 11,
+      "of": 24,
+      "accuracy": 0.458,
+      "mean_prompt_tokens": 850,
+      "mean_prompt_eval_seconds": 31.69
+    }
+  },
+  "by_question_type": {
+    "lexical": {
+      "full": 0.583,
+      "recent": 0.0,
+      "cce": 0.833,
+      "cce_hash": 0.917
+    },
+    "paraphrase": {
+      "full": 0.0,
+      "recent": 0.0,
+      "cce": 0.333,
+      "cce_hash": 0.0
+    }
+  },
+  "rows": [
+    {
+      "conversation": 0,
+      "question": "What fee percentage does the payment provider charge?",
+      "kind": "lexical",
+      "keys": [
+        "2.9"
+      ],
+      "turns_from_end": 32,
+      "build_seconds": {
+        "cce": 113.7,
+        "cce_hash": 0.09
+      },
+      "full": {
+        "answer": "The payment provider charges a 2.9 percent fee per transaction.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5511,
+        "cached_tokens": 0,
+        "prompt_ms": 249452.452,
+        "seconds": 256.51,
+        "correct": true
+      },
+      "recent": {
+        "answer": "The payment provider charges a fee percentage of 2.5%.",
+        "finish_reason": "stop",
+        "prompt_tokens": 712,
+        "cached_tokens": 63,
+        "prompt_ms": 25764.497,
+        "seconds": 31.19,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The payment provider charges a 2.9 percent fee per transaction.",
+        "finish_reason": "stop",
+        "prompt_tokens": 766,
+        "cached_tokens": 0,
+        "prompt_ms": 27327.409,
+        "seconds": 29.93,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "The payment provider charges a 2.9 percent fee per transaction.",
+        "finish_reason": "stop",
+        "prompt_tokens": 786,
+        "cached_tokens": 0,
+        "prompt_ms": 25087.428,
+        "seconds": 27.73,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 0,
+      "question": "What is the most we are allowed to spend on hosting each month?",
+      "kind": "paraphrase",
+      "keys": [
+        "1200"
+      ],
+      "turns_from_end": 54,
+      "build_seconds": {
+        "cce": 3.63,
+        "cce_hash": 0.14
+      },
+      "full": {
+        "answer": "The most we are allowed to spend on hosting each month is $100.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5516,
+        "cached_tokens": 5467,
+        "prompt_ms": 9294.511,
+        "seconds": 15.22,
+        "correct": false
+      },
+      "recent": {
+        "answer": "The most we are allowed to spend on hosting each month is $100.",
+        "finish_reason": "stop",
+        "prompt_tokens": 717,
+        "cached_tokens": 668,
+        "prompt_ms": 2310.274,
+        "seconds": 6.86,
+        "correct": false
+      },
+      "cce": {
+        "answer": "I'm sorry, but as an AI, I don't have access to previous conversations or context. I'm here to provide information and answer questions based on the current context. If you have any questions about the current hosting policy, please provide more details.",
+        "finish_reason": "stop",
+        "prompt_tokens": 710,
+        "cached_tokens": 0,
+        "prompt_ms": 24631.503,
+        "seconds": 33.89,
+        "correct": false
+      },
+      "cce_hash": {
+        "answer": "I'm sorry, but as an AI, I don't have access to previous conversations or any context about hosting expenses. I'm here to provide information and answer questions related to the current conversation.",
+        "finish_reason": "stop",
+        "prompt_tokens": 795,
+        "cached_tokens": 0,
+        "prompt_ms": 24707.422,
+        "seconds": 32.0,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 0,
+      "question": "What do we call the upcoming application inside the company?",
+      "kind": "paraphrase",
+      "keys": [
+        "quartz"
+      ],
+      "turns_from_end": 26,
+      "build_seconds": {
+        "cce": 3.6,
+        "cce_hash": 0.1
+      },
+      "full": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 5513,
+        "cached_tokens": 5467,
+        "prompt_ms": 8429.207,
+        "seconds": 9.5,
+        "correct": false
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 598,
+        "cached_tokens": 63,
+        "prompt_ms": 20144.758,
+        "seconds": 21.01,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The upcoming application inside the company is named as \"Quartz\".",
+        "finish_reason": "stop",
+        "prompt_tokens": 658,
+        "cached_tokens": 70,
+        "prompt_ms": 20164.272,
+        "seconds": 22.81,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 786,
+        "cached_tokens": 0,
+        "prompt_ms": 26475.018,
+        "seconds": 27.33,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 0,
+      "question": "Which person should be paged first if production breaks?",
+      "kind": "paraphrase",
+      "keys": [
+        "sofia"
+      ],
+      "turns_from_end": 42,
+      "build_seconds": {
+        "cce": 3.52,
+        "cce_hash": 0.1
+      },
+      "full": {
+        "answer": "The person to be paged first if production breaks is the team lead.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5513,
+        "cached_tokens": 5466,
+        "prompt_ms": 8941.049,
+        "seconds": 14.39,
+        "correct": false
+      },
+      "recent": {
+        "answer": "The person to be paged first if production breaks is the Production Manager.",
+        "finish_reason": "stop",
+        "prompt_tokens": 714,
+        "cached_tokens": 667,
+        "prompt_ms": 2203.455,
+        "seconds": 5.48,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The person to be paged first if production breaks is the Production Manager.",
+        "finish_reason": "stop",
+        "prompt_tokens": 747,
+        "cached_tokens": 0,
+        "prompt_ms": 25380.227,
+        "seconds": 28.38,
+        "correct": false
+      },
+      "cce_hash": {
+        "answer": "The person to be paged first if production breaks is the Production Manager.",
+        "finish_reason": "stop",
+        "prompt_tokens": 882,
+        "cached_tokens": 0,
+        "prompt_ms": 28379.15,
+        "seconds": 31.41,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 0,
+      "question": "Which floor is my apartment on?",
+      "kind": "lexical",
+      "keys": [
+        "15"
+      ],
+      "turns_from_end": 48,
+      "build_seconds": {
+        "cce": 3.52,
+        "cce_hash": 0.09
+      },
+      "full": {
+        "answer": "Your apartment is on the 15th floor.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5509,
+        "cached_tokens": 5467,
+        "prompt_ms": 7899.224,
+        "seconds": 12.0,
+        "correct": true
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI, I don't have access to previous conversations or any context about the apartment or its floor. I'm here to provide assistance related to computer science questions.",
+        "finish_reason": "stop",
+        "prompt_tokens": 710,
+        "cached_tokens": 668,
+        "prompt_ms": 1779.334,
+        "seconds": 9.18,
+        "correct": false
+      },
+      "cce": {
+        "answer": "My apartment is on floor number 15 of the building.",
+        "finish_reason": "stop",
+        "prompt_tokens": 747,
+        "cached_tokens": 0,
+        "prompt_ms": 23906.231,
+        "seconds": 26.46,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "My apartment is on floor number 15 of the building.",
+        "finish_reason": "stop",
+        "prompt_tokens": 939,
+        "cached_tokens": 0,
+        "prompt_ms": 29210.543,
+        "seconds": 31.72,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 0,
+      "question": "In which city will my sibling be getting married?",
+      "kind": "paraphrase",
+      "keys": [
+        "lisbon"
+      ],
+      "turns_from_end": 62,
+      "build_seconds": {
+        "cce": 3.68,
+        "cce_hash": 0.13
+      },
+      "full": {
+        "answer": "I'm sorry, but as an AI, I don't have access to personal data about individuals unless it has been shared with me in the course of our conversation. I am designed to respect user privacy and confidentiality. Therefore, I can't provide the information you're looking for.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5513,
+        "cached_tokens": 5466,
+        "prompt_ms": 9283.732,
+        "seconds": 30.76,
+        "correct": false
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI programming assistant, I don't have access to personal data about individuals unless it has been shared with me in the course of our conversation. I am designed to respect user privacy and confidentiality. Therefore, I can't provide the information you're looking for.",
+        "finish_reason": "stop",
+        "prompt_tokens": 598,
+        "cached_tokens": 551,
+        "prompt_ms": 1923.573,
+        "seconds": 12.41,
+        "correct": false
+      },
+      "cce": {
+        "answer": "My sibling will be getting married in Lisbon next spring.",
+        "finish_reason": "stop",
+        "prompt_tokens": 633,
+        "cached_tokens": 70,
+        "prompt_ms": 19101.984,
+        "seconds": 21.51,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "I'm sorry, but as an AI, I don't have access to personal data about individuals unless it has been shared with me in the course of our conversation. I am designed to respect user privacy and confidentiality. Therefore, I can't provide information about your sibling's wedding.",
+        "finish_reason": "stop",
+        "prompt_tokens": 873,
+        "cached_tokens": 0,
+        "prompt_ms": 29768.704,
+        "seconds": 40.91,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 0,
+      "question": "When is our production deploy window?",
+      "kind": "lexical",
+      "keys": [
+        "saturday"
+      ],
+      "turns_from_end": 72,
+      "build_seconds": {
+        "cce": 3.53,
+        "cce_hash": 0.13
+      },
+      "full": {
+        "answer": "The production deploy window is Saturday at 3 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5509,
+        "cached_tokens": 5466,
+        "prompt_ms": 7906.303,
+        "seconds": 11.89,
+        "correct": true
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI, I don't have access to any specific information about production deploy windows or any other context related to computer science.",
+        "finish_reason": "stop",
+        "prompt_tokens": 710,
+        "cached_tokens": 667,
+        "prompt_ms": 2187.71,
+        "seconds": 8.37,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The production deploy window is scheduled for Saturday at 3 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 704,
+        "cached_tokens": 0,
+        "prompt_ms": 21920.623,
+        "seconds": 24.32,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "Our production deploy window is Saturday at 3 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 901,
+        "cached_tokens": 0,
+        "prompt_ms": 29514.653,
+        "seconds": 31.77,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 0,
+      "question": "Under what name is the hotel booked?",
+      "kind": "lexical",
+      "keys": [
+        "alvarez"
+      ],
+      "turns_from_end": 58,
+      "build_seconds": {
+        "cce": 3.52,
+        "cce_hash": 0.11
+      },
+      "full": {
+        "answer": "The hotel is booked under the name \"Deepseek Coder\".",
+        "finish_reason": "stop",
+        "prompt_tokens": 5511,
+        "cached_tokens": 5466,
+        "prompt_ms": 8188.725,
+        "seconds": 13.45,
+        "correct": false
+      },
+      "recent": {
+        "answer": "The hotel is booked under the name \"John\".",
+        "finish_reason": "stop",
+        "prompt_tokens": 596,
+        "cached_tokens": 551,
+        "prompt_ms": 1787.766,
+        "seconds": 3.88,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The hotel is booked under the name Alvarez.",
+        "finish_reason": "stop",
+        "prompt_tokens": 607,
+        "cached_tokens": 70,
+        "prompt_ms": 16688.73,
+        "seconds": 18.9,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "The hotel is booked under the name Alvarez.",
+        "finish_reason": "stop",
+        "prompt_tokens": 756,
+        "cached_tokens": 0,
+        "prompt_ms": 22919.215,
+        "seconds": 25.21,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 1,
+      "question": "On which day do I do my long run?",
+      "kind": "lexical",
+      "keys": [
+        "saturday"
+      ],
+      "turns_from_end": 36,
+      "build_seconds": {
+        "cce": 5.0,
+        "cce_hash": 0.11
+      },
+      "full": {
+        "answer": "The long run is scheduled for Saturday mornings.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5911,
+        "cached_tokens": 0,
+        "prompt_ms": 272048.798,
+        "seconds": 279.16,
+        "correct": true
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI programming assistant, I don't have access to previous conversations or personal data unless it's shared in this conversation. I'm designed to respect user privacy and confidentiality. Therefore, I can't provide the information you're asking for.",
+        "finish_reason": "stop",
+        "prompt_tokens": 383,
+        "cached_tokens": 63,
+        "prompt_ms": 12295.397,
+        "seconds": 28.13,
+        "correct": false
+      },
+      "cce": {
+        "answer": "I mentioned that the production deploy window was on Tuesday at 3 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 763,
+        "cached_tokens": 0,
+        "prompt_ms": 27879.457,
+        "seconds": 32.43,
+        "correct": false
+      },
+      "cce_hash": {
+        "answer": "Relevant: I usually do my long run on Saturday mornings.",
+        "finish_reason": "stop",
+        "prompt_tokens": 924,
+        "cached_tokens": 0,
+        "prompt_ms": 29633.075,
+        "seconds": 32.92,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 1,
+      "question": "When is our production deploy window?",
+      "kind": "lexical",
+      "keys": [
+        "tuesday"
+      ],
+      "turns_from_end": 44,
+      "build_seconds": {
+        "cce": 3.95,
+        "cce_hash": 0.1
+      },
+      "full": {
+        "answer": "The production deploy window is on Tuesday at 3 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5908,
+        "cached_tokens": 5865,
+        "prompt_ms": 9445.419,
+        "seconds": 14.33,
+        "correct": true
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI, I don't have access to previous conversations or any specific context about production deploy windows. I'm here to provide assistance related to computer science questions. If you have any questions related to that, feel free to ask.",
+        "finish_reason": "stop",
+        "prompt_tokens": 815,
+        "cached_tokens": 0,
+        "prompt_ms": 26686.311,
+        "seconds": 35.95,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The production deploy window is Tuesday at 3 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 838,
+        "cached_tokens": 0,
+        "prompt_ms": 31509.218,
+        "seconds": 33.77,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "The production deploy window is Tuesday at 3 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 759,
+        "cached_tokens": 0,
+        "prompt_ms": 23752.446,
+        "seconds": 25.85,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 1,
+      "question": "Whose surname is on the reservation for the stay?",
+      "kind": "paraphrase",
+      "keys": [
+        "nakamura"
+      ],
+      "turns_from_end": 56,
+      "build_seconds": {
+        "cce": 3.93,
+        "cce_hash": 0.09
+      },
+      "full": {
+        "answer": "The surname of the reservation holder is not mentioned.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5915,
+        "cached_tokens": 5865,
+        "prompt_ms": 10583.124,
+        "seconds": 15.82,
+        "correct": false
+      },
+      "recent": {
+        "answer": "The surname of the reservation holder is not mentioned.",
+        "finish_reason": "stop",
+        "prompt_tokens": 934,
+        "cached_tokens": 0,
+        "prompt_ms": 28475.957,
+        "seconds": 30.99,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The surname of the reservation holder is 'Smith'.",
+        "finish_reason": "stop",
+        "prompt_tokens": 942,
+        "cached_tokens": 0,
+        "prompt_ms": 29615.405,
+        "seconds": 32.37,
+        "correct": false
+      },
+      "cce_hash": {
+        "answer": "The surname of the reservation holder is Mr. Smith.",
+        "finish_reason": "stop",
+        "prompt_tokens": 1017,
+        "cached_tokens": 0,
+        "prompt_ms": 33329.303,
+        "seconds": 36.01,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 1,
+      "question": "What do we call the upcoming application inside the company?",
+      "kind": "paraphrase",
+      "keys": [
+        "cobalt"
+      ],
+      "turns_from_end": 28,
+      "build_seconds": {
+        "cce": 3.89,
+        "cce_hash": 0.1
+      },
+      "full": {
+        "answer": "The upcoming application inside the company is 'not mentioned'.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5912,
+        "cached_tokens": 5865,
+        "prompt_ms": 9990.231,
+        "seconds": 14.49,
+        "correct": false
+      },
+      "recent": {
+        "answer": "The upcoming application inside the company is called '[Application Name]'.",
+        "finish_reason": "stop",
+        "prompt_tokens": 986,
+        "cached_tokens": 0,
+        "prompt_ms": 31018.846,
+        "seconds": 33.75,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The upcoming application inside the company is called '[Application Name]'.",
+        "finish_reason": "stop",
+        "prompt_tokens": 1034,
+        "cached_tokens": 0,
+        "prompt_ms": 35288.21,
+        "seconds": 38.08,
+        "correct": false
+      },
+      "cce_hash": {
+        "answer": "The upcoming application inside the company is called 'The Future of Work Application'.",
+        "finish_reason": "stop",
+        "prompt_tokens": 1186,
+        "cached_tokens": 0,
+        "prompt_ms": 44073.429,
+        "seconds": 48.62,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 1,
+      "question": "How many days until the staging database password rotates?",
+      "kind": "lexical",
+      "keys": [
+        "90"
+      ],
+      "turns_from_end": 52,
+      "build_seconds": {
+        "cce": 3.84,
+        "cce_hash": 0.1
+      },
+      "full": {
+        "answer": "The staging database password rotation occurs every 90 days.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5913,
+        "cached_tokens": 5865,
+        "prompt_ms": 10149.883,
+        "seconds": 15.42,
+        "correct": true
+      },
+      "recent": {
+        "answer": "The staging database password rotation is scheduled to occur every 30 days.",
+        "finish_reason": "stop",
+        "prompt_tokens": 385,
+        "cached_tokens": 337,
+        "prompt_ms": 1961.433,
+        "seconds": 5.21,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The staging database password rotation is every 90 days.",
+        "finish_reason": "stop",
+        "prompt_tokens": 679,
+        "cached_tokens": 70,
+        "prompt_ms": 19160.88,
+        "seconds": 21.63,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "The staging database password rotates every 90 days.",
+        "finish_reason": "stop",
+        "prompt_tokens": 754,
+        "cached_tokens": 238,
+        "prompt_ms": 17248.379,
+        "seconds": 19.81,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 1,
+      "question": "What is the most we are allowed to spend on hosting each month?",
+      "kind": "paraphrase",
+      "keys": [
+        "600"
+      ],
+      "turns_from_end": 48,
+      "build_seconds": {
+        "cce": 3.88,
+        "cce_hash": 0.11
+      },
+      "full": {
+        "answer": "The most we are allowed to spend on hosting each month is $1000.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5915,
+        "cached_tokens": 5865,
+        "prompt_ms": 10486.919,
+        "seconds": 17.55,
+        "correct": false
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI programming assistant, I don't have access to previous conversations or any specific context about hosting costs. I'm here to provide assistance related to computer science and programming. If you have any questions related to these topics, feel free to ask.",
+        "finish_reason": "stop",
+        "prompt_tokens": 989,
+        "cached_tokens": 940,
+        "prompt_ms": 2422.709,
+        "seconds": 13.14,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The most we are allowed to spend on hosting each month is 600 dollars.",
+        "finish_reason": "stop",
+        "prompt_tokens": 1082,
+        "cached_tokens": 0,
+        "prompt_ms": 36107.149,
+        "seconds": 39.47,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "I'm sorry, but as an AI, I don't have access to previous conversations or any context about hosting expenses. I'm here to provide information and answer questions related to programming and computer science. If you have any questions in those areas, feel free to ask.",
+        "finish_reason": "stop",
+        "prompt_tokens": 1132,
+        "cached_tokens": 0,
+        "prompt_ms": 41379.843,
+        "seconds": 51.69,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 1,
+      "question": "Which nut am I allergic to?",
+      "kind": "lexical",
+      "keys": [
+        "pistachio"
+      ],
+      "turns_from_end": 66,
+      "build_seconds": {
+        "cce": 3.87,
+        "cce_hash": 0.1
+      },
+      "full": {
+        "answer": "I'm sorry, but as an AI programming assistant, I don't have access to personal data about individuals unless it has been shared with me in the course of our conversation. I am designed to respect user privacy and confidentiality. Therefore, I can't provide information about your allergies.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5909,
+        "cached_tokens": 5865,
+        "prompt_ms": 9408.861,
+        "seconds": 32.42,
+        "correct": false
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI programming assistant, I don't have access to personal data about individuals unless it has been shared with me in the course of our conversation. I am designed to respect user privacy and confidentiality. Therefore, I can't provide information about your allergies.",
+        "finish_reason": "stop",
+        "prompt_tokens": 928,
+        "cached_tokens": 884,
+        "prompt_ms": 2249.041,
+        "seconds": 13.78,
+        "correct": false
+      },
+      "cce": {
+        "answer": "I'm sorry, but as an AI, I don't have access to personal data about individuals unless it has been shared with me in the course of our conversation. I am designed to respect user privacy and confidentiality. Therefore, I can't provide information about your food allergies.",
+        "finish_reason": "stop",
+        "prompt_tokens": 1000,
+        "cached_tokens": 0,
+        "prompt_ms": 33203.71,
+        "seconds": 43.81,
+        "correct": false
+      },
+      "cce_hash": {
+        "answer": "I'm sorry, but as an AI, I don't have access to past conversations or personal data. I'm designed to provide information and answer questions to the best of my ability based on the information provided in the current conversation.",
+        "finish_reason": "stop",
+        "prompt_tokens": 637,
+        "cached_tokens": 70,
+        "prompt_ms": 20092.285,
+        "seconds": 28.32,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 1,
+      "question": "How high up in the building do I live?",
+      "kind": "paraphrase",
+      "keys": [
+        "9"
+      ],
+      "turns_from_end": 40,
+      "build_seconds": {
+        "cce": 3.91,
+        "cce_hash": 0.09
+      },
+      "full": {
+        "answer": "I live in the 4th floor of the building.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5911,
+        "cached_tokens": 5865,
+        "prompt_ms": 9645.99,
+        "seconds": 14.59,
+        "correct": false
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI, I don't have access to previous conversations or any personal data unless it's shared with me in this conversation. I'm designed to respect user privacy and confidentiality. Therefore, I can't provide an answer based on the information provided in this conversation.",
+        "finish_reason": "stop",
+        "prompt_tokens": 985,
+        "cached_tokens": 939,
+        "prompt_ms": 2194.14,
+        "seconds": 14.35,
+        "correct": false
+      },
+      "cce": {
+        "answer": "I'm sorry, but as an AI, I don't have access to previous conversations or any context about the location or building. I'm here to provide assistance based on the current information provided.",
+        "finish_reason": "stop",
+        "prompt_tokens": 1008,
+        "cached_tokens": 0,
+        "prompt_ms": 32234.162,
+        "seconds": 39.91,
+        "correct": false
+      },
+      "cce_hash": {
+        "answer": "I live in the 4th floor of the building.",
+        "finish_reason": "stop",
+        "prompt_tokens": 893,
+        "cached_tokens": 0,
+        "prompt_ms": 29004.486,
+        "seconds": 31.31,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 2,
+      "question": "What fee percentage does the payment provider charge?",
+      "kind": "lexical",
+      "keys": [
+        "1.8"
+      ],
+      "turns_from_end": 66,
+      "build_seconds": {
+        "cce": 4.71,
+        "cce_hash": 0.12
+      },
+      "full": {
+        "answer": "The payment provider charges a 1.8 percent fee per transaction.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5578,
+        "cached_tokens": 0,
+        "prompt_ms": 264280.753,
+        "seconds": 272.26,
+        "correct": true
+      },
+      "recent": {
+        "answer": "The fee percentage that the payment provider charges is not mentioned in this conversation.",
+        "finish_reason": "stop",
+        "prompt_tokens": 795,
+        "cached_tokens": 0,
+        "prompt_ms": 45557.194,
+        "seconds": 60.41,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The payment provider charges a 1.8 percent fee per transaction.",
+        "finish_reason": "stop",
+        "prompt_tokens": 836,
+        "cached_tokens": 0,
+        "prompt_ms": 39268.612,
+        "seconds": 42.05,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "The payment provider charges a 1.8 percent fee per transaction.",
+        "finish_reason": "stop",
+        "prompt_tokens": 860,
+        "cached_tokens": 0,
+        "prompt_ms": 26451.772,
+        "seconds": 29.04,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 2,
+      "question": "What weekday morning is reserved for my longest training session?",
+      "kind": "paraphrase",
+      "keys": [
+        "saturday"
+      ],
+      "turns_from_end": 42,
+      "build_seconds": {
+        "cce": 3.19,
+        "cce_hash": 0.1
+      },
+      "full": {
+        "answer": "The longest training session is scheduled for a Monday morning.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5581,
+        "cached_tokens": 5534,
+        "prompt_ms": 12173.741,
+        "seconds": 17.62,
+        "correct": false
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI programming assistant, I don't have access to personal data unless it has been shared with me in the course of our conversation. I am designed to respect user privacy and confidentiality. Therefore, I can't provide the information you're asking for.",
+        "finish_reason": "stop",
+        "prompt_tokens": 676,
+        "cached_tokens": 0,
+        "prompt_ms": 32589.447,
+        "seconds": 47.19,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The longest training session is scheduled for Monday morning.",
+        "finish_reason": "stop",
+        "prompt_tokens": 671,
+        "cached_tokens": 70,
+        "prompt_ms": 28487.255,
+        "seconds": 30.61,
+        "correct": false
+      },
+      "cce_hash": {
+        "answer": "The longest training session is usually held on a Monday morning.",
+        "finish_reason": "stop",
+        "prompt_tokens": 798,
+        "cached_tokens": 0,
+        "prompt_ms": 34870.466,
+        "seconds": 37.4,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 2,
+      "question": "Which floor is my apartment on?",
+      "kind": "lexical",
+      "keys": [
+        "7"
+      ],
+      "turns_from_end": 22,
+      "build_seconds": {
+        "cce": 3.26,
+        "cce_hash": 0.09
+      },
+      "full": {
+        "answer": "The floor of my apartment is not mentioned in this conversation.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5576,
+        "cached_tokens": 5533,
+        "prompt_ms": 10698.804,
+        "seconds": 15.59,
+        "correct": false
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI, I don't have access to personal data about individuals unless it has been shared with me in the course of our conversation. I am designed to respect user privacy and confidentiality. Therefore, I can't provide the information you're looking for.",
+        "finish_reason": "stop",
+        "prompt_tokens": 567,
+        "cached_tokens": 63,
+        "prompt_ms": 23785.336,
+        "seconds": 36.49,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Your apartment is on floor number 7 of the building.",
+        "finish_reason": "stop",
+        "prompt_tokens": 574,
+        "cached_tokens": 70,
+        "prompt_ms": 24002.277,
+        "seconds": 26.39,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "Your apartment is on floor number 7 of the building.",
+        "finish_reason": "stop",
+        "prompt_tokens": 762,
+        "cached_tokens": 214,
+        "prompt_ms": 25839.388,
+        "seconds": 29.13,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 2,
+      "question": "What do we call the upcoming application inside the company?",
+      "kind": "paraphrase",
+      "keys": [
+        "bluefin"
+      ],
+      "turns_from_end": 54,
+      "build_seconds": {
+        "cce": 3.1,
+        "cce_hash": 0.09
+      },
+      "full": {
+        "answer": "The upcoming application inside the company is not mentioned.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5580,
+        "cached_tokens": 5533,
+        "prompt_ms": 12071.758,
+        "seconds": 16.23,
+        "correct": false
+      },
+      "recent": {
+        "answer": "The upcoming application inside the company is not mentioned.",
+        "finish_reason": "stop",
+        "prompt_tokens": 650,
+        "cached_tokens": 0,
+        "prompt_ms": 29194.39,
+        "seconds": 31.45,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The upcoming application inside the company is called \"Bluefin\".",
+        "finish_reason": "stop",
+        "prompt_tokens": 608,
+        "cached_tokens": 70,
+        "prompt_ms": 25695.044,
+        "seconds": 28.02,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "The upcoming application inside the company is a \"Marketing Asset Management Software\".",
+        "finish_reason": "stop",
+        "prompt_tokens": 725,
+        "cached_tokens": 0,
+        "prompt_ms": 33306.495,
+        "seconds": 36.37,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 2,
+      "question": "Which person should be paged first if production breaks?",
+      "kind": "paraphrase",
+      "keys": [
+        "dmitri"
+      ],
+      "turns_from_end": 18,
+      "build_seconds": {
+        "cce": 3.08,
+        "cce_hash": 0.09
+      },
+      "full": {
+        "answer": "The person to be paged first in the event of a production break is the team leader or project manager.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5580,
+        "cached_tokens": 5533,
+        "prompt_ms": 11808.048,
+        "seconds": 20.97,
+        "correct": false
+      },
+      "recent": {
+        "answer": "The person to be paged first in the event of a production break is the Production Manager.",
+        "finish_reason": "stop",
+        "prompt_tokens": 571,
+        "cached_tokens": 525,
+        "prompt_ms": 2751.45,
+        "seconds": 7.07,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The person to be paged first is the Production Manager.",
+        "finish_reason": "stop",
+        "prompt_tokens": 593,
+        "cached_tokens": 70,
+        "prompt_ms": 24736.458,
+        "seconds": 27.15,
+        "correct": false
+      },
+      "cce_hash": {
+        "answer": "The person to be paged first if production breaks is the Production Manager.",
+        "finish_reason": "stop",
+        "prompt_tokens": 872,
+        "cached_tokens": 0,
+        "prompt_ms": 40756.897,
+        "seconds": 44.13,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 2,
+      "question": "Which city do we ship stock from?",
+      "kind": "paraphrase",
+      "keys": [
+        "osaka"
+      ],
+      "turns_from_end": 62,
+      "build_seconds": {
+        "cce": 3.11,
+        "cce_hash": 0.09
+      },
+      "full": {
+        "answer": "We ship stock from the city mentioned earlier.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5577,
+        "cached_tokens": 5534,
+        "prompt_ms": 10277.747,
+        "seconds": 14.13,
+        "correct": false
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI, I don't have access to previous conversations or any context about the city we ship stock from. I'm here to provide assistance related to computer science questions.",
+        "finish_reason": "stop",
+        "prompt_tokens": 568,
+        "cached_tokens": 525,
+        "prompt_ms": 2498.719,
+        "seconds": 11.04,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The city we ship stock from is New York.",
+        "finish_reason": "stop",
+        "prompt_tokens": 615,
+        "cached_tokens": 70,
+        "prompt_ms": 25662.454,
+        "seconds": 27.63,
+        "correct": false
+      },
+      "cce_hash": {
+        "answer": "The city we ship stock from is New York.",
+        "finish_reason": "stop",
+        "prompt_tokens": 988,
+        "cached_tokens": 222,
+        "prompt_ms": 49733.964,
+        "seconds": 53.85,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 2,
+      "question": "Which nut am I allergic to?",
+      "kind": "lexical",
+      "keys": [
+        "almond"
+      ],
+      "turns_from_end": 58,
+      "build_seconds": {
+        "cce": 3.1,
+        "cce_hash": 0.09
+      },
+      "full": {
+        "answer": "I'm sorry, but as an AI focused on computer science, I don't have information about personal allergies or dietary preferences.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5577,
+        "cached_tokens": 5534,
+        "prompt_ms": 10489.722,
+        "seconds": 21.15,
+        "correct": false
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI focused on computer science, I don't have the capability to provide information about personal allergies.",
+        "finish_reason": "stop",
+        "prompt_tokens": 755,
+        "cached_tokens": 0,
+        "prompt_ms": 38477.88,
+        "seconds": 43.79,
+        "correct": false
+      },
+      "cce": {
+        "answer": "I'm allergic to almonds.",
+        "finish_reason": "stop",
+        "prompt_tokens": 796,
+        "cached_tokens": 0,
+        "prompt_ms": 35288.187,
+        "seconds": 37.37,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "I am allergic to almonds.",
+        "finish_reason": "stop",
+        "prompt_tokens": 661,
+        "cached_tokens": 70,
+        "prompt_ms": 44327.797,
+        "seconds": 47.89,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 2,
+      "question": "Where is my sister's wedding?",
+      "kind": "lexical",
+      "keys": [
+        "lisbon"
+      ],
+      "turns_from_end": 50,
+      "build_seconds": {
+        "cce": 3.1,
+        "cce_hash": 0.08
+      },
+      "full": {
+        "answer": "The sister's wedding is scheduled for a date and time mentioned earlier in this conversation.",
+        "finish_reason": "stop",
+        "prompt_tokens": 5577,
+        "cached_tokens": 5533,
+        "prompt_ms": 10543.421,
+        "seconds": 17.4,
+        "correct": false
+      },
+      "recent": {
+        "answer": "I'm sorry, but as an AI, I don't have access to personal data about individuals unless it has been shared with me in the course of our conversation. I am designed to respect user privacy and confidentiality. Therefore, I can't provide information about your sister's wedding.",
+        "finish_reason": "stop",
+        "prompt_tokens": 672,
+        "cached_tokens": 628,
+        "prompt_ms": 2159.584,
+        "seconds": 15.11,
+        "correct": false
+      },
+      "cce": {
+        "answer": "My sister's wedding is in Lisbon next spring.",
+        "finish_reason": "stop",
+        "prompt_tokens": 684,
+        "cached_tokens": 70,
+        "prompt_ms": 22138.745,
+        "seconds": 24.51,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "My sister's wedding is in Lisbon next spring.",
+        "finish_reason": "stop",
+        "prompt_tokens": 719,
+        "cached_tokens": 74,
+        "prompt_ms": 50747.571,
+        "seconds": 53.5,
+        "correct": true
+      }
+    }
+  ]
+}

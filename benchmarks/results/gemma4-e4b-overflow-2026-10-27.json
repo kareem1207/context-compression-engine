@@ -1,0 +1,846 @@
+{
+  "label": "gemma4-e4b-overflow-2026-10-27",
+  "mode": "overflow",
+  "date": "2026-10-27",
+  "machine": "AMD64 Family 25 Model 80 Stepping 0, AuthenticAMD, Windows",
+  "setup": {
+    "conversations": 2,
+    "questions_per_conversation": 8,
+    "target_tokens": 9000,
+    "window_tokens": 3300,
+    "hot_tier_max_turns": 4,
+    "retrieval_top_k": 3,
+    "meso_max_tokens": 150,
+    "dataset": "UltraChat 200k (test_sft) filler + randomised planted facts"
+  },
+  "summary": {
+    "window": {
+      "correct": 5,
+      "of": 16,
+      "accuracy": 0.312,
+      "mean_prompt_tokens": 3148,
+      "mean_prompt_eval_seconds": 9.76
+    },
+    "recent": {
+      "correct": 0,
+      "of": 16,
+      "accuracy": 0.0,
+      "mean_prompt_tokens": 650,
+      "mean_prompt_eval_seconds": 9.4
+    },
+    "cce": {
+      "correct": 16,
+      "of": 16,
+      "accuracy": 1.0,
+      "mean_prompt_tokens": 720,
+      "mean_prompt_eval_seconds": 13.97
+    },
+    "cce_hash": {
+      "correct": 8,
+      "of": 16,
+      "accuracy": 0.5,
+      "mean_prompt_tokens": 892,
+      "mean_prompt_eval_seconds": 16.67
+    }
+  },
+  "by_question_type": {
+    "lexical": {
+      "window": 0.25,
+      "recent": 0.0,
+      "cce": 1.0,
+      "cce_hash": 1.0
+    },
+    "paraphrase": {
+      "window": 0.375,
+      "recent": 0.0,
+      "cce": 1.0,
+      "cce_hash": 0.0
+    }
+  },
+  "rows": [
+    {
+      "conversation": 0,
+      "question": "On what day are we allowed to push releases live?",
+      "kind": "paraphrase",
+      "keys": [
+        "tuesday"
+      ],
+      "turns_from_end": 148,
+      "build_seconds": {
+        "cce": 35.76,
+        "cce_hash": 0.16
+      },
+      "window": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 3189,
+        "cached_tokens": 0,
+        "prompt_ms": 68216.216,
+        "seconds": 70.59,
+        "correct": false
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 581,
+        "cached_tokens": 0,
+        "prompt_ms": 11828.957,
+        "seconds": 12.24,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Our production deploy window is Tuesday at 3 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 648,
+        "cached_tokens": 0,
+        "prompt_ms": 13344.521,
+        "seconds": 14.66,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 933,
+        "cached_tokens": 0,
+        "prompt_ms": 19020.36,
+        "seconds": 19.31,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 0,
+      "question": "What fee percentage does the payment provider charge?",
+      "kind": "lexical",
+      "keys": [
+        "2.9"
+      ],
+      "turns_from_end": 164,
+      "build_seconds": {
+        "cce": 5.54,
+        "cce_hash": 0.16
+      },
+      "window": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 3187,
+        "cached_tokens": 3144,
+        "prompt_ms": 1621.307,
+        "seconds": 1.97,
+        "correct": false
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 705,
+        "cached_tokens": 0,
+        "prompt_ms": 14253.952,
+        "seconds": 14.54,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The payment provider charges a 2.9 percent fee per transaction.",
+        "finish_reason": "stop",
+        "prompt_tokens": 822,
+        "cached_tokens": 0,
+        "prompt_ms": 17061.287,
+        "seconds": 18.75,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "Our payment provider charges a 2.9 percent fee per transaction.",
+        "finish_reason": "stop",
+        "prompt_tokens": 802,
+        "cached_tokens": 0,
+        "prompt_ms": 15488.815,
+        "seconds": 17.21,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 0,
+      "question": "How high up in the building do I live?",
+      "kind": "paraphrase",
+      "keys": [
+        "9"
+      ],
+      "turns_from_end": 108,
+      "build_seconds": {
+        "cce": 5.54,
+        "cce_hash": 0.18
+      },
+      "window": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 3188,
+        "cached_tokens": 3144,
+        "prompt_ms": 1345.667,
+        "seconds": 1.68,
+        "correct": false
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 706,
+        "cached_tokens": 662,
+        "prompt_ms": 1107.904,
+        "seconds": 1.36,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Your apartment is on floor number 9 of the building.",
+        "finish_reason": "stop",
+        "prompt_tokens": 770,
+        "cached_tokens": 0,
+        "prompt_ms": 15191.817,
+        "seconds": 16.67,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 934,
+        "cached_tokens": 0,
+        "prompt_ms": 18903.098,
+        "seconds": 19.19,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 0,
+      "question": "In which city will my sibling be getting married?",
+      "kind": "paraphrase",
+      "keys": [
+        "quito"
+      ],
+      "turns_from_end": 64,
+      "build_seconds": {
+        "cce": 5.42,
+        "cce_hash": 0.17
+      },
+      "window": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 3188,
+        "cached_tokens": 3144,
+        "prompt_ms": 1254.424,
+        "seconds": 1.57,
+        "correct": false
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 492,
+        "cached_tokens": 0,
+        "prompt_ms": 9826.033,
+        "seconds": 10.1,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Your sister's wedding is in Quito.",
+        "finish_reason": "stop",
+        "prompt_tokens": 586,
+        "cached_tokens": 63,
+        "prompt_ms": 10684.809,
+        "seconds": 11.79,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 872,
+        "cached_tokens": 0,
+        "prompt_ms": 17380.842,
+        "seconds": 17.67,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 0,
+      "question": "What is our monthly cloud budget cap?",
+      "kind": "lexical",
+      "keys": [
+        "400"
+      ],
+      "turns_from_end": 58,
+      "build_seconds": {
+        "cce": 5.61,
+        "cce_hash": 0.17
+      },
+      "window": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 3186,
+        "cached_tokens": 3144,
+        "prompt_ms": 1248.386,
+        "seconds": 1.59,
+        "correct": false
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 704,
+        "cached_tokens": 662,
+        "prompt_ms": 1006.212,
+        "seconds": 1.31,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Our monthly cloud budget is capped at 400 dollars.",
+        "finish_reason": "stop",
+        "prompt_tokens": 757,
+        "cached_tokens": 0,
+        "prompt_ms": 15702.516,
+        "seconds": 17.27,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "Our monthly cloud budget is capped at 400 dollars.",
+        "finish_reason": "stop",
+        "prompt_tokens": 867,
+        "cached_tokens": 236,
+        "prompt_ms": 12877.616,
+        "seconds": 14.48,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 0,
+      "question": "Under what name is the hotel booked?",
+      "kind": "lexical",
+      "keys": [
+        "nakamura"
+      ],
+      "turns_from_end": 136,
+      "build_seconds": {
+        "cce": 5.54,
+        "cce_hash": 0.17
+      },
+      "window": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 3186,
+        "cached_tokens": 3144,
+        "prompt_ms": 1275.808,
+        "seconds": 1.61,
+        "correct": false
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 490,
+        "cached_tokens": 448,
+        "prompt_ms": 970.193,
+        "seconds": 1.27,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The hotel is booked under the name Nakamura.",
+        "finish_reason": "stop",
+        "prompt_tokens": 553,
+        "cached_tokens": 63,
+        "prompt_ms": 10123.406,
+        "seconds": 11.23,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "The hotel was booked under the name Nakamura.",
+        "finish_reason": "stop",
+        "prompt_tokens": 985,
+        "cached_tokens": 0,
+        "prompt_ms": 19361.145,
+        "seconds": 20.49,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 0,
+      "question": "Is there an ingredient I must avoid because of an allergy?",
+      "kind": "paraphrase",
+      "keys": [
+        "walnut"
+      ],
+      "turns_from_end": 42,
+      "build_seconds": {
+        "cce": 5.66,
+        "cce_hash": 0.15
+      },
+      "window": {
+        "answer": "You must avoid walnuts because of an allergy.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3190,
+        "cached_tokens": 3144,
+        "prompt_ms": 1228.837,
+        "seconds": 2.46,
+        "correct": true
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 708,
+        "cached_tokens": 662,
+        "prompt_ms": 1192.178,
+        "seconds": 1.48,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Walnuts must be avoided because of an allergy.",
+        "finish_reason": "stop",
+        "prompt_tokens": 868,
+        "cached_tokens": 0,
+        "prompt_ms": 17942.752,
+        "seconds": 19.17,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 942,
+        "cached_tokens": 207,
+        "prompt_ms": 14098.033,
+        "seconds": 14.42,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 0,
+      "question": "What is the internal codename for the new app?",
+      "kind": "lexical",
+      "keys": [
+        "willow"
+      ],
+      "turns_from_end": 80,
+      "build_seconds": {
+        "cce": 5.52,
+        "cce_hash": 0.18
+      },
+      "window": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 3189,
+        "cached_tokens": 3144,
+        "prompt_ms": 1184.808,
+        "seconds": 1.52,
+        "correct": false
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 877,
+        "cached_tokens": 0,
+        "prompt_ms": 17985.648,
+        "seconds": 18.26,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The internal codename for the new app is Willow.",
+        "finish_reason": "stop",
+        "prompt_tokens": 903,
+        "cached_tokens": 0,
+        "prompt_ms": 17738.377,
+        "seconds": 19.1,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "Our internal codename for the new app is Willow.",
+        "finish_reason": "stop",
+        "prompt_tokens": 917,
+        "cached_tokens": 0,
+        "prompt_ms": 17226.26,
+        "seconds": 18.59,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 1,
+      "question": "Where is the warehouse located?",
+      "kind": "lexical",
+      "keys": [
+        "bergen"
+      ],
+      "turns_from_end": 134,
+      "build_seconds": {
+        "cce": 6.27,
+        "cce_hash": 0.15
+      },
+      "window": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 3104,
+        "cached_tokens": 0,
+        "prompt_ms": 69240.54,
+        "seconds": 71.66,
+        "correct": false
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 652,
+        "cached_tokens": 0,
+        "prompt_ms": 13223.138,
+        "seconds": 13.62,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Our main warehouse is located in Bergen.",
+        "finish_reason": "stop",
+        "prompt_tokens": 692,
+        "cached_tokens": 0,
+        "prompt_ms": 13110.504,
+        "seconds": 14.08,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "Our main warehouse is located in Bergen.",
+        "finish_reason": "stop",
+        "prompt_tokens": 707,
+        "cached_tokens": 0,
+        "prompt_ms": 13766.448,
+        "seconds": 14.74,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 1,
+      "question": "Whose surname is on the reservation for the stay?",
+      "kind": "paraphrase",
+      "keys": [
+        "haddad"
+      ],
+      "turns_from_end": 32,
+      "build_seconds": {
+        "cce": 6.23,
+        "cce_hash": 0.16
+      },
+      "window": {
+        "answer": "The surname on the reservation for the stay is Haddad.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3109,
+        "cached_tokens": 3064,
+        "prompt_ms": 1470.104,
+        "seconds": 3.15,
+        "correct": true
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 657,
+        "cached_tokens": 612,
+        "prompt_ms": 1136.645,
+        "seconds": 1.39,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The surname on the reservation for the stay is Haddad.",
+        "finish_reason": "stop",
+        "prompt_tokens": 701,
+        "cached_tokens": 0,
+        "prompt_ms": 13456.106,
+        "seconds": 14.93,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 939,
+        "cached_tokens": 0,
+        "prompt_ms": 18217.74,
+        "seconds": 18.5,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 1,
+      "question": "On what day are we allowed to push releases live?",
+      "kind": "paraphrase",
+      "keys": [
+        "tuesday"
+      ],
+      "turns_from_end": 144,
+      "build_seconds": {
+        "cce": 6.04,
+        "cce_hash": 0.15
+      },
+      "window": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 3109,
+        "cached_tokens": 3064,
+        "prompt_ms": 1286.996,
+        "seconds": 1.62,
+        "correct": false
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 579,
+        "cached_tokens": 0,
+        "prompt_ms": 11342.951,
+        "seconds": 11.62,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Our production deploy window is Tuesday at 3 AM.",
+        "finish_reason": "stop",
+        "prompt_tokens": 631,
+        "cached_tokens": 0,
+        "prompt_ms": 12440.425,
+        "seconds": 13.79,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 893,
+        "cached_tokens": 0,
+        "prompt_ms": 17186.653,
+        "seconds": 17.49,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 1,
+      "question": "Is there an ingredient I must avoid because of an allergy?",
+      "kind": "paraphrase",
+      "keys": [
+        "hazelnut"
+      ],
+      "turns_from_end": 42,
+      "build_seconds": {
+        "cce": 6.14,
+        "cce_hash": 0.15
+      },
+      "window": {
+        "answer": "Hazelnuts must be avoided because of an allergy.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3110,
+        "cached_tokens": 3064,
+        "prompt_ms": 1369.505,
+        "seconds": 2.89,
+        "correct": true
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 808,
+        "cached_tokens": 0,
+        "prompt_ms": 16675.003,
+        "seconds": 16.95,
+        "correct": false
+      },
+      "cce": {
+        "answer": "You must avoid hazelnuts because you are allergic to them.",
+        "finish_reason": "stop",
+        "prompt_tokens": 877,
+        "cached_tokens": 0,
+        "prompt_ms": 16980.957,
+        "seconds": 18.33,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 1098,
+        "cached_tokens": 0,
+        "prompt_ms": 22166.175,
+        "seconds": 22.47,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 1,
+      "question": "What is the most we are allowed to spend on hosting each month?",
+      "kind": "paraphrase",
+      "keys": [
+        "800"
+      ],
+      "turns_from_end": 92,
+      "build_seconds": {
+        "cce": 6.04,
+        "cce_hash": 0.16
+      },
+      "window": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 3112,
+        "cached_tokens": 3064,
+        "prompt_ms": 1510.956,
+        "seconds": 1.84,
+        "correct": false
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 758,
+        "cached_tokens": 0,
+        "prompt_ms": 15888.531,
+        "seconds": 16.19,
+        "correct": false
+      },
+      "cce": {
+        "answer": "Our monthly cloud budget is capped at 800 dollars.",
+        "finish_reason": "stop",
+        "prompt_tokens": 822,
+        "cached_tokens": 0,
+        "prompt_ms": 15702.443,
+        "seconds": 17.37,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 877,
+        "cached_tokens": 0,
+        "prompt_ms": 17202.228,
+        "seconds": 17.52,
+        "correct": false
+      }
+    },
+    {
+      "conversation": 1,
+      "question": "How many days until the staging database password rotates?",
+      "kind": "lexical",
+      "keys": [
+        "60"
+      ],
+      "turns_from_end": 154,
+      "build_seconds": {
+        "cce": 6.0,
+        "cce_hash": 0.15
+      },
+      "window": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 3108,
+        "cached_tokens": 3064,
+        "prompt_ms": 1335.951,
+        "seconds": 1.66,
+        "correct": false
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 468,
+        "cached_tokens": 0,
+        "prompt_ms": 9548.651,
+        "seconds": 9.82,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The staging database password rotates every 60 days.",
+        "finish_reason": "stop",
+        "prompt_tokens": 555,
+        "cached_tokens": 63,
+        "prompt_ms": 9528.481,
+        "seconds": 10.87,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "The staging database password rotates every 60 days.",
+        "finish_reason": "stop",
+        "prompt_tokens": 926,
+        "cached_tokens": 229,
+        "prompt_ms": 13496.059,
+        "seconds": 14.85,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 1,
+      "question": "What fee percentage does the payment provider charge?",
+      "kind": "lexical",
+      "keys": [
+        "3.2"
+      ],
+      "turns_from_end": 38,
+      "build_seconds": {
+        "cce": 6.01,
+        "cce_hash": 0.16
+      },
+      "window": {
+        "answer": "The payment provider charges a 3.2 percent fee per transaction.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3107,
+        "cached_tokens": 3064,
+        "prompt_ms": 1269.941,
+        "seconds": 3.17,
+        "correct": true
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 677,
+        "cached_tokens": 0,
+        "prompt_ms": 13667.973,
+        "seconds": 13.94,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The payment provider charges a 3.2 percent fee per transaction.",
+        "finish_reason": "stop",
+        "prompt_tokens": 750,
+        "cached_tokens": 0,
+        "prompt_ms": 14224.986,
+        "seconds": 15.91,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "Our payment provider charges a 3.2 percent fee per transaction.",
+        "finish_reason": "stop",
+        "prompt_tokens": 869,
+        "cached_tokens": 0,
+        "prompt_ms": 16554.244,
+        "seconds": 18.27,
+        "correct": true
+      }
+    },
+    {
+      "conversation": 1,
+      "question": "Who is the on-call engineer this month?",
+      "kind": "lexical",
+      "keys": [
+        "aisha"
+      ],
+      "turns_from_end": 48,
+      "build_seconds": {
+        "cce": 6.03,
+        "cce_hash": 0.15
+      },
+      "window": {
+        "answer": "The on-call engineer this month is Aisha.",
+        "finish_reason": "stop",
+        "prompt_tokens": 3108,
+        "cached_tokens": 3064,
+        "prompt_ms": 1232.873,
+        "seconds": 2.62,
+        "correct": true
+      },
+      "recent": {
+        "answer": "not mentioned",
+        "finish_reason": "stop",
+        "prompt_tokens": 537,
+        "cached_tokens": 0,
+        "prompt_ms": 10801.24,
+        "seconds": 11.07,
+        "correct": false
+      },
+      "cce": {
+        "answer": "The on-call engineer this month is Aisha.",
+        "finish_reason": "stop",
+        "prompt_tokens": 590,
+        "cached_tokens": 63,
+        "prompt_ms": 10211.109,
+        "seconds": 11.44,
+        "correct": true
+      },
+      "cce_hash": {
+        "answer": "The on-call engineer this month is Aisha.",
+        "finish_reason": "stop",
+        "prompt_tokens": 715,
+        "cached_tokens": 0,
+        "prompt_ms": 13721.981,
+        "seconds": 14.95,
+        "correct": true
+      }
+    }
+  ]
+}
