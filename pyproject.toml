@@ -27,14 +27,15 @@ dependencies = [
 [project.optional-dependencies]
 neural = ["sentence-transformers>=3.0"]
 rest = ["fastapi>=0.110", "uvicorn>=0.29", "pydantic>=2.6"]
-mcp = ["mcp>=1.2", "pydantic>=2.6"]
-ui = ["fastapi>=0.110", "uvicorn>=0.29", "pyvis>=0.3"]
+mcp = ["mcp>=1.2,<2", "pydantic>=2.6"]
+ui = ["fastapi>=0.110", "uvicorn>=0.29"]
 tokens = ["tiktoken>=0.7"]
 all = ["context-compression-engine[neural,rest,mcp,ui]"]
 
 [project.scripts]
 cce-rest = "cce_rest.app:main"
 cce-mcp = "cce_mcp.server:main"
+cce-ui = "cce_ui.cli:main"
 
 [project.urls]
 Homepage = "https://kareem1207.github.io/context-compression-engine/"
@@ -49,13 +50,12 @@ dev = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
     "pydantic>=2.6",
-    "mcp>=1.2",
-    "pyvis>=0.3",
+    "mcp>=1.2,<2",
 ]
 bench = ["pyarrow>=15"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["cce_core", "cce_mcp", "cce_rest"]
+packages = ["cce_core", "cce_mcp", "cce_rest", "cce_ui"]
 
 [tool.hatch.build.targets.sdist]
-include = ["cce_core", "cce_mcp", "cce_rest", "README.md", "LICENSE", "pyproject.toml"]
+include = ["cce_core", "cce_mcp", "cce_rest", "cce_ui", "README.md", "LICENSE", "pyproject.toml"]

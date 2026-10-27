@@ -5,17 +5,22 @@ Pydantic input/output models for all MCP tool parameters.
 
 from __future__ import annotations
 
-from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Annotated, Optional
+from pydantic import AfterValidator, BaseModel, Field, ConfigDict
+
+from cce_core.ids import validate_session_id
+
+# Session ids become file names in the cold tier, so they are checked like the REST API checks them.
+SessionId = Annotated[str, AfterValidator(validate_session_id)]
 
 
 class IngestTurnInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
-    session_id: str = Field(
+    session_id: SessionId = Field(
         ...,
         description="Unique session identifier (e.g. 'user-123-chat')",
-        min_length=1, max_length=200,
+        min_length=1, max_length=64,
     )
     role: str = Field(
         ...,
@@ -32,10 +37,10 @@ class IngestTurnInput(BaseModel):
 class IngestHistoryInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
-    session_id: str = Field(
+    session_id: SessionId = Field(
         ...,
         description="Unique session identifier",
-        min_length=1, max_length=200,
+        min_length=1, max_length=64,
     )
     messages: list[dict] = Field(
         ...,
@@ -47,10 +52,10 @@ class IngestHistoryInput(BaseModel):
 class RetrieveContextInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
-    session_id: str = Field(
+    session_id: SessionId = Field(
         ...,
         description="Session to retrieve context from",
-        min_length=1, max_length=200,
+        min_length=1, max_length=64,
     )
     query: str = Field(
         ...,
@@ -76,20 +81,20 @@ class RetrieveContextInput(BaseModel):
 class SummarizeSessionInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
-    session_id: str = Field(
+    session_id: SessionId = Field(
         ...,
         description="Session to summarize",
-        min_length=1, max_length=200,
+        min_length=1, max_length=64,
     )
 
 
 class CloseSessionInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
-    session_id: str = Field(
+    session_id: SessionId = Field(
         ...,
         description="Session to close",
-        min_length=1, max_length=200,
+        min_length=1, max_length=64,
     )
     checkpoint: bool = Field(
         default=True,
@@ -100,10 +105,10 @@ class CloseSessionInput(BaseModel):
 class SessionStatsInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
-    session_id: str = Field(
+    session_id: SessionId = Field(
         ...,
         description="Session to get stats for",
-        min_length=1, max_length=200,
+        min_length=1, max_length=64,
     )
 
 

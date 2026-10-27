@@ -20,6 +20,23 @@ jobs:
       # test_e2e_gemma.py needs a running llama.cpp server, so it is skipped here.
       - run: uv run pytest -q --ignore=tests/test_e2e_gemma.py
 
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Build the wheel and sdist
+        run: uv build --out-dir dist
+      - name: Install the wheel into a clean venv and smoke-test it
+        run: |
+          uv venv --python 3.12 /tmp/clean
+          uv pip install --python /tmp/clean/bin/python "$(ls dist/*.whl)[rest,mcp,ui]"
+          cd /tmp
+          /tmp/clean/bin/cce-rest --help
+          /tmp/clean/bin/cce-mcp --help
+          /tmp/clean/bin/cce-ui --help
+          /tmp/clean/bin/python -I -c "import cce_core, cce_mcp.server, cce_rest.app, cce_ui; from importlib.resources import files; assert files('cce_ui').joinpath('dashboard.html').is_file()"
+
   javascript:
     runs-on: ubuntu-latest
     defaults:

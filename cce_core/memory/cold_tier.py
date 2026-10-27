@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
+from cce_core.ids import validate_session_id
 from cce_core.ingestion import tokenizer
 
 
@@ -113,6 +114,11 @@ class ColdTier:
         self._lock = threading.Lock()
         self._index: dict[str, dict] = self._load_index()
 
+    def _path(self, session_id: str) -> Path:
+        """The summary file of a session. The id is checked, so the path cannot leave the cold dir."""
+        validate_session_id(session_id)
+        return self._cold_dir / f"{session_id}.json"
+
     # ── Write ─────────────────────────────────────────────────────────────────
 
     def write(self, summary: MacroSummary) -> Path:
@@ -121,7 +127,7 @@ class ColdTier:
         Overwrites if session_id already exists.
         Returns the path to the written file.
         """
-        file_path = self._cold_dir / f"{summary.session_id}.json"
+        file_path = self._path(summary.session_id)
         data = summary.to_dict()
 
         with self._lock:
@@ -138,7 +144,7 @@ class ColdTier:
             self._save_index()
 
         for sid in dropped:
-            (self._cold_dir / f"{sid}.json").unlink(missing_ok=True)
+            self._path(sid).unlink(missing_ok=True)
         return file_path
 
     def write_from_nodes(
@@ -182,15 +188,24 @@ class ColdTier:
 
     def get(self, session_id: str) -> MacroSummary | None:
         """Load a macro summary by session_id. Returns None if not found."""
+        if not self._valid(session_id):
+            return None
         with self._lock:
             entry = self._index.get(session_id)
         if not entry:
             return None
-        file_path = self._cold_dir / entry["file"]
+        file_path = self._path(session_id)
         if not file_path.exists():
             return None
         data = json.loads(file_path.read_text(encoding="utf-8"))
         return MacroSummary.from_dict(data)
+
+    def _valid(self, session_id: str) -> bool:
+        try:
+            self._path(session_id)
+        except ValueError:
+            return False
+        return True
 
     def exists(self, session_id: str) -> bool:
         with self._lock:
@@ -214,15 +229,15 @@ class ColdTier:
     # ── Delete ────────────────────────────────────────────────────────────────
 
     def delete(self, session_id: str) -> bool:
+        if not self._valid(session_id):
+            return False
         with self._lock:
             if session_id not in self._index:
                 return False
-            entry = self._index.pop(session_id)
+            self._index.pop(session_id)
             self._save_index()
 
-        file_path = self._cold_dir / entry["file"]
-        if file_path.exists():
-            file_path.unlink()
+        self._path(session_id).unlink(missing_ok=True)
         return True
 
     # ── Stats ─────────────────────────────────────────────────────────────────

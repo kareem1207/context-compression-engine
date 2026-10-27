@@ -76,7 +76,8 @@ CREATE INDEX IF NOT EXISTS idx_turn_start ON memory_nodes (turn_start);
 #   1 = adds the `turns` and `session_meta` tables (live-session state survives restarts)
 #   2 = adds memory_nodes.hits (how often a note was retrieved; decides what gets merged first)
 #   3 = adds node_changes + triggers (the change log the shared search index follows)
-SCHEMA_VERSION = 3
+#   4 = adds meta (key/value; holds the embedder the notes were made with)
+SCHEMA_VERSION = 4
 
 _CREATE_TURNS = """
 CREATE TABLE IF NOT EXISTS turns (
@@ -116,6 +117,13 @@ _CREATE_TRIGGERS = (
     """CREATE TRIGGER IF NOT EXISTS memory_nodes_ad AFTER DELETE ON memory_nodes
        BEGIN INSERT INTO node_changes (op, node_id) VALUES ('d', OLD.node_id); END""",
 )
+
+_CREATE_META = """
+CREATE TABLE IF NOT EXISTS meta (
+    key    TEXT PRIMARY KEY,
+    value  TEXT NOT NULL
+);
+"""
 
 _KEEP_CHANGES = 20000   # change-log rows kept; an index that fell further behind reloads instead
 
@@ -208,6 +216,8 @@ class WarmTier:
                 conn.execute(_CREATE_CHANGES)
                 for trigger in _CREATE_TRIGGERS:
                     conn.execute(trigger)
+            if version < 4:
+                conn.execute(_CREATE_META)
             conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             conn.commit()
         except BaseException:
@@ -437,6 +447,26 @@ class WarmTier:
                     "SELECT COUNT(*) FROM memory_nodes"
                 ).fetchone()
         return row[0]
+
+    # ── Meta ──────────────────────────────────────────────────────────────────
+
+    def get_meta(self, key: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+        return row[0] if row else None
+
+    def set_meta_if_absent(self, key: str, value: str) -> str:
+        """Store value unless the key exists already (also across processes). Returns what is stored."""
+        with self._lock:
+            self._conn.execute("INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)", (key, value))
+            self._commit()
+        return self.get_meta(key)
+
+    def stored_embedding_dim(self) -> int | None:
+        """Dimension of the vectors already in the notes table (None when it is empty)."""
+        with self._lock:
+            row = self._conn.execute("SELECT length(embedding) / 4 FROM memory_nodes LIMIT 1").fetchone()
+        return int(row[0]) if row else None
 
     def token_sum(self, session_id: str) -> int:
         """Total token_count of a session's notes, without loading them."""
