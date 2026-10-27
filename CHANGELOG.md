@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 (2026-10-18)
+## 1.0.0 (2026-10-27)
 
 Fixes for live sessions, counting, limits and search, found while checking how MCP and REST users run CCE. Existing `.cce_data` folders from 0.1.x keep working; they are upgraded in place the first time they are opened.
 
