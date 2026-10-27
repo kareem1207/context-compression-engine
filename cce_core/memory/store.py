@@ -121,6 +121,11 @@ class MemoryStore:
         found = self._log.texts(node.session_id or self.session_id, [node.turn_start + i for i in local_indexes])
         return {i: found[node.turn_start + i] for i in local_indexes if node.turn_start + i in found}
 
+    def get_all_turns(self) -> list[Turn]:
+        """Every turn whose text is stored, oldest first: recent, pending and (with keep_raw_turns) compressed ones."""
+        with self._lock:
+            return self._log.load_all(self.session_id)
+
     def get_pending_turns(self) -> list[Turn]:
         """Turns that left the hot tier but are not in a memory note yet (oldest first)."""
         with self._lock:

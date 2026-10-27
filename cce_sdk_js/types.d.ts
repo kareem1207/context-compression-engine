@@ -22,6 +22,44 @@ export interface ClientOptions {
 export interface ContextOptions {
   topK?: number;
   fmt?: Format;
+  /** Also return why the context looks as it does (REST `explain`). */
+  explain?: boolean;
+}
+
+/** Why a context looks as it does: chosen notes and quotes, scores, the token budget split, what was dropped. */
+export interface Explain {
+  query: {
+    text: string;
+    mode: "search" | "overview";
+    top_k: number;
+    bm25_terms: string[];
+    embedder: { name: string; dim: number; model?: string };
+    notes_in_session: number;
+    notes_retrieved: number;
+  };
+  budget: {
+    max_tokens: number;
+    usable: number;
+    system_note: number;
+    overhead: number;
+    recent_turns: number;
+    pending_turns: number;
+    past_notes: number;
+    total: number;
+  };
+  recent: { turns: number; shortened_or_dropped: boolean };
+  pending: { turns_included: number; turns_available: number; cut: boolean };
+  notes: Array<{
+    node_id: string;
+    topic: string;
+    turns: [number, number];
+    included: boolean;
+    tokens: number;
+    scores: { dense: number; recency: number; bm25: number; fused: number };
+    quotes: string[];
+    overview_lines: string[];
+  }>;
+  dropped_for_budget: string[];
 }
 
 export interface ContextResponse {
@@ -29,6 +67,27 @@ export interface ContextResponse {
   token_count: number;
   was_truncated: boolean;
   retrieved_node_ids: string[];
+  explain?: Explain;
+}
+
+/** GET /v1/sessions/{id}/stats */
+export interface SessionStats {
+  session_id: string;
+  turns_ingested: number;
+  raw_tokens: number;
+  hot_turns: number;
+  pending_turns: number;
+  warm_nodes: number;
+  warm_tokens_original: number;
+  warm_tokens_compressed: number;
+  raw_turns_stored: number;
+  /** What sending the whole session would cost now: notes as sent + hot and pending turns. */
+  tokens_sent: number;
+  tokens_saved: number;
+  /** raw_tokens / tokens_sent; null while the session is not smaller than its raw text. */
+  compression_ratio: number | null;
+  cold_summary_exists: boolean;
+  opened_at: string;
 }
 
 export interface CompressResponse {
@@ -53,7 +112,7 @@ export class CCEClient {
   addMessages(sessionId: string, messages: Message[]): Promise<{ session_id: string; turns_added: number }>;
   getContext(sessionId: string, query: string, options?: ContextOptions): Promise<ContextResponse>;
   getSummary(sessionId: string): Promise<{ session_id: string; macro_summary: string; node_count: number; topics: string[] }>;
-  getStats(sessionId: string): Promise<Record<string, unknown>>;
+  getStats(sessionId: string): Promise<SessionStats>;
   closeSession(sessionId: string, options?: { checkpoint?: boolean }): Promise<{ session_id: string; closed: boolean }>;
   deleteSession(sessionId: string): Promise<{ session_id: string; deleted: boolean }>;
 }

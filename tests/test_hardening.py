@@ -99,7 +99,7 @@ def test_traversal_through_the_mcp_tools_writes_nothing_outside(tmp_path):
     """This used to create <data dir>/../escaped.json when the session was closed."""
     cfg = make_config(tmp_path)
     engine = CCEEngine(cfg)
-    ctx = SimpleNamespace(request_context=SimpleNamespace(lifespan_state={"engine": engine, "manager": engine.create_session_manager()}))
+    ctx = SimpleNamespace(request_context=SimpleNamespace(lifespan_context={"engine": engine, "manager": engine.create_session_manager()}))
 
     async def progress(*a, **k):
         return None
@@ -188,13 +188,13 @@ def test_console_scripts_point_at_real_functions():
     import importlib
 
     scripts = _pyproject()["project"]["scripts"]
-    assert set(scripts) == {"cce-rest", "cce-mcp", "cce-ui"}
+    assert set(scripts) == {"cce-rest", "cce-mcp", "cce-ui", "cce", "cce-proxy"}
     for target in scripts.values():
         module, func = target.split(":")
         assert callable(getattr(importlib.import_module(module), func))
 
 
-@pytest.mark.parametrize("target", ["cce_rest.app:main", "cce_mcp.server:main", "cce_ui.cli:main"])
+@pytest.mark.parametrize("target", ["cce_rest.app:main", "cce_mcp.server:main", "cce_ui.cli:main", "cce_proxy.app:main", "cce_core.cli:main"])
 def test_help_prints_usage_and_exits(target, capsys):
     import importlib
 
@@ -202,4 +202,4 @@ def test_help_prints_usage_and_exits(target, capsys):
     with pytest.raises(SystemExit) as e:
         getattr(importlib.import_module(module), func)(["--help"])
     assert e.value.code == 0
-    assert "usage: cce-" in capsys.readouterr().out
+    assert "usage: cce" in capsys.readouterr().out

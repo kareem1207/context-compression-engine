@@ -314,15 +314,26 @@ class CCEEngine:
         rank = (lambda turns: self.retriever.rank_turns(turns, query)) if pending else None
 
         if not results:
-            return self.context_builder.build_empty(hot_turns, pending, rank)
-
-        return self.context_builder.build(
-            results=results,
-            hot_turns=hot_turns,
-            include_micro=include_micro,
-            pending_turns=pending,
-            pending_rank_fn=rank,
-        )
+            payload = self.context_builder.build_empty(hot_turns, pending, rank)
+        else:
+            payload = self.context_builder.build(
+                results=results,
+                hot_turns=hot_turns,
+                include_micro=include_micro,
+                pending_turns=pending,
+                pending_rank_fn=rank,
+            )
+        from cce_core.retrieval.retriever import is_overview_query, query_terms
+        payload.explain["query"] = {
+            "text": query,
+            "mode": "overview" if is_overview_query(query) else "search",
+            "top_k": top_k or self.config.retrieval_top_k,
+            "bm25_terms": query_terms(query, self.config),
+            "embedder": self.embedder_identity(),
+            "notes_in_session": store.warm.count(store.session_id),
+            "notes_retrieved": len(results),
+        }
+        return payload
 
     def query(
         self,

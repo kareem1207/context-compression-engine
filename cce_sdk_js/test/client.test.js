@@ -22,6 +22,15 @@ test("compress posts the right payload", async () => {
   assert.deepEqual(JSON.parse(f.calls[0].init.body), { messages: [{ role: "user", content: "hi" }], query: "q", top_k: 3, fmt: "messages" });
 });
 
+test("getContext can ask for the explanation", async () => {
+  const f = mockFetch(() => ({ body: { context: [], explain: { notes: [] } } }));
+  const c = new CCEClient({ fetch: f });
+  await c.getContext("s", "q", { explain: true });
+  assert.deepEqual(JSON.parse(f.calls[0].init.body), { query: "q", fmt: "messages", explain: true });
+  await c.getContext("s", "q");
+  assert.equal(JSON.parse(f.calls[1].init.body).explain, false);
+});
+
 test("session ids are URL-encoded", async () => {
   const f = mockFetch(() => ({ body: { sessions: [] } }));
   const c = new CCEClient({ fetch: f });

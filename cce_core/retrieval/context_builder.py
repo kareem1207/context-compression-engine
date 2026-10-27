@@ -75,6 +75,7 @@ class ContextPayload:
     retrieved_node_ids: list[str] = field(default_factory=list)
     was_truncated: bool = False
     pending_turns: list[Turn] = field(default_factory=list)
+    explain: dict = field(default_factory=dict)   # why this payload looks as it does (see ContextBuilder.build)
 
     def to_messages(self) -> list[dict]:
         """
@@ -142,6 +143,7 @@ class ContextPayload:
             "token_count": self.token_count,
             "retrieved_node_ids": self.retrieved_node_ids,
             "was_truncated": self.was_truncated,
+            "explain": self.explain,
             "past_block_count": len(self.past_blocks),
             "recent_turn_count": len(self.recent_turns),
         }
@@ -233,6 +235,42 @@ class ContextBuilder:
             tokenizer.count(b) for b in past_blocks
         )
 
+        past_tokens = [tokenizer.count(b) for b in past_blocks]
+        block_tokens = dict(zip(included_ids, past_tokens))
+        explain = {
+            "budget": {
+                "max_tokens": max_tokens or self.config.context_max_tokens,
+                "usable": budget,
+                "system_note": system_tokens,
+                "overhead": overhead,
+                "recent_turns": recent_tokens,
+                "pending_turns": pending_tokens,
+                "past_notes": sum(past_tokens),
+                "total": total_tokens,
+            },
+            "recent": {"turns": len(hot_turns), "shortened_or_dropped": recent_cut},
+            "pending": {"turns_included": len(pending), "turns_available": len(pending_turns or []), "cut": pending_cut},
+            "notes": [
+                {
+                    "node_id": r.node.node_id,
+                    "topic": r.node.topic_label,
+                    "turns": [r.node.turn_start, r.node.turn_end],
+                    "included": r.node.node_id in block_tokens,
+                    "tokens": block_tokens.get(r.node.node_id, 0),
+                    "scores": {
+                        "dense": round(r.semantic_score, 4),
+                        "recency": round(r.recency_score, 4),
+                        "bm25": round(r.keyword_score, 4),
+                        "fused": round(r.composite_score, 5),
+                    },
+                    "quotes": [q[:200] for q in (r.evidence or ([r.best_turn] if r.best_turn else []))],
+                    "overview_lines": r.overview_lines,
+                }
+                for r in results
+            ],
+            "dropped_for_budget": [r.node.node_id for r in results if r.node.node_id not in block_tokens],
+        }
+
         return ContextPayload(
             past_blocks=past_blocks,
             recent_turns=hot_turns,
@@ -241,6 +279,7 @@ class ContextBuilder:
             retrieved_node_ids=included_ids,
             was_truncated=was_truncated or pending_cut or recent_cut,
             pending_turns=pending,
+            explain=explain,
         )
 
     def build_stateless(

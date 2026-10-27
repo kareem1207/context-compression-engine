@@ -76,6 +76,10 @@ class RetrieveContextInput(BaseModel):
         default=False,
         description="Include per-turn micro summaries in past context blocks",
     )
+    explain: bool = Field(
+        default=False,
+        description="Also return why the context looks as it does: chosen notes and quotes, scores, token budget split, what was dropped",
+    )
 
 
 class SummarizeSessionInput(BaseModel):

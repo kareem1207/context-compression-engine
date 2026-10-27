@@ -144,6 +144,19 @@ class TurnLog:
                 "SELECT COUNT(*) FROM turns WHERE session_id = ? AND state = ?", (session_id, state)
             ).fetchone()[0]
 
+    def load_all(self, session_id: str) -> list[Turn]:
+        """Every stored turn of the session in conversation order (compressed ones only if their text is kept)."""
+        with self._warm._lock:
+            rows = self._conn.execute(
+                "SELECT idx, turn_id, role, content, token_count, timestamp, metadata FROM turns "
+                "WHERE session_id = ? ORDER BY idx", (session_id,),
+            ).fetchall()
+        return [
+            Turn(turn_id=r["turn_id"], role=r["role"], content=r["content"], token_count=r["token_count"],
+                 timestamp=datetime.fromisoformat(r["timestamp"]), index=r["idx"], metadata=json.loads(r["metadata"]))
+            for r in rows
+        ]
+
     def load(self, session_id: str, state: str) -> list[Turn]:
         with self._warm._lock:
             rows = self._conn.execute(

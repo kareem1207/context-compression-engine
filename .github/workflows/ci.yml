@@ -57,6 +57,23 @@ jobs:
       - name: Live sessions, 2 pinned conversations (one-shot, live, restart, crash, facts buried in longer messages)
         run: uv run --group bench python benchmarks/retrieval_live.py --conversations 2 --seed-start 509 --top-k 5 --modes oneshot,live,live_restart,live_crash,live_buried,oneshot_buried --min oneshot=0.95 --min live=0.95 --min live_restart=0.9 --min live_crash=0.95 --min live_buried=0.9 --min oneshot_buried=0.9
 
+  integrations:
+    # The LangChain and LlamaIndex classes against the real libraries (too heavy for the dev group).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install CCE with the libraries
+        run: |
+          uv venv --python 3.12 /tmp/int
+          uv pip install --python /tmp/int/bin/python -e ".[rest,mcp]" langchain-core llama-index-core pytest
+      - name: Integration tests (examples included)
+        run: |
+          /tmp/int/bin/python -m pytest tests/test_integrations.py -q
+          CCE_EMBEDDER=hash /tmp/int/bin/python examples/integrations/langchain_memory.py
+          CCE_EMBEDDER=hash /tmp/int/bin/python examples/integrations/llamaindex_memory.py
+          /tmp/int/bin/python examples/integrations/proxy_demo.py
+
   javascript:
     runs-on: ubuntu-latest
     defaults:
