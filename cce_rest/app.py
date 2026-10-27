@@ -43,7 +43,7 @@ def create_app(config: CCEConfig | None = None) -> FastAPI:
 
     app = FastAPI(
         title="Context Compression Engine",
-        version="0.1.0",
+        version="1.0.0",
         description="Compress long conversations into compact memory and fetch just the context an LLM needs.",
         lifespan=lifespan,
     )
