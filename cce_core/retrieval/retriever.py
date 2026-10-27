@@ -216,6 +216,13 @@ class Retriever:
             r.evidence = node_evidence(r.node, qvec)
         return top
 
+    def rank_turns(self, turns: list, query: str) -> list:
+        """Order turns by how well they match the query, best first (used for pending turns)."""
+        qvec = self.embed_fn(query).astype(np.float32)
+        scored = [(float(self.embed_fn(t.content).astype(np.float32) @ qvec), t) for t in turns]
+        scored.sort(key=lambda p: -p[0])
+        return [t for _, t in scored]
+
     def retrieve_by_turn(
         self,
         store: "MemoryStore",

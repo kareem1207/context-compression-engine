@@ -98,6 +98,26 @@ class CCEEngine:
 
         return nodes
 
+    def compress_live(
+        self,
+        turns: list[Turn],
+        session_id: str | None = None,
+        final: bool = False,
+    ) -> tuple[list[MemoryNode], int]:
+        """
+        Compress the oldest part of a pending buffer in topic-sized notes (live sessions).
+
+        The last topic of `turns` may still be going on, so unless `final` is set it is left
+        out. Returns (nodes, number of leading turns they cover); turns past that stay pending.
+        """
+        chunks: list[Chunk] = self.chunker.chunk(turns, session_id=session_id)
+        if not final:
+            chunks = chunks[:-1]
+        if not chunks:
+            return [], 0
+        self.summarizer.annotate_chunks(chunks)
+        return self.merger.merge(chunks), sum(len(c.turns) for c in chunks)
+
     def compress_incremental(
         self,
         new_turns: list[Turn],
@@ -159,6 +179,7 @@ class CCEEngine:
             session_id=session_id,
             config=self.config,
             compress_fn=self.compress_incremental,
+            live_compress_fn=self.compress_live,
         )
 
     def full_pipeline(
@@ -179,9 +200,7 @@ class CCEEngine:
         store.ingest_nodes(nodes, turns=turns)
 
         # Push latest turns into hot tier for verbatim recent context
-        recent = turns[-self.config.hot_tier_max_turns:]
-        for turn in recent:
-            store.hot.push(turn)
+        store.seed_hot(turns[-self.config.hot_tier_max_turns:])
 
         return store, turns, nodes
 
@@ -235,14 +254,18 @@ class CCEEngine:
         """
         results = self.retriever.retrieve(store, query, top_k=top_k)
         hot_turns = store.get_hot_turns()
+        pending = store.get_pending_turns()
+        rank = (lambda turns: self.retriever.rank_turns(turns, query)) if pending else None
 
         if not results:
-            return self.context_builder.build_empty(hot_turns)
+            return self.context_builder.build_empty(hot_turns, pending, rank)
 
         return self.context_builder.build(
             results=results,
             hot_turns=hot_turns,
             include_micro=include_micro,
+            pending_turns=pending,
+            pending_rank_fn=rank,
         )
 
     def query(

@@ -127,8 +127,8 @@ async def send_all(event: str, data: dict):
 async def process_user_turn(text: str, turn_index: int = None, total: int = None):
     """Process one user turn through the full CCE pipeline and broadcast each step.
     
-    We push directly to the store's hot tier WITHOUT the auto-compress_fn so we
-    can intercept evictions ourselves and broadcast each summarizer step visually.
+    We add turns to the store WITHOUT auto-compression so we can compress the pending
+    (evicted) turns ourselves and broadcast each summarizer step visually.
     """
     from cce_core.ingestion.segmenter import Turn as TurnObj
     import uuid
@@ -140,36 +140,27 @@ async def process_user_turn(text: str, turn_index: int = None, total: int = None
         return
 
     # Build Turn manually (bypass manager.add_message which auto-compresses)
-    buf = manager._turn_buffers.get(SESSION_ID, [])
     turn = TurnObj(
         turn_id=str(uuid.uuid4()),
         role="user",
         content=text,
         token_count=max(1, round(len(text.split()) / 0.75)),
         timestamp=datetime.now(timezone.utc),
-        index=len(buf),
+        index=store.next_index,
     )
-    buf.append(turn)
-    manager._turn_buffers[SESSION_ID] = buf
 
     await send_all("log", {"type": "info", "text": f"{prefix}Pushing to hot tier (RAM)..."})
 
-    # Push to hot tier directly — capture evicted turn
-    evicted_turn = store.hot.push(turn)
-    store._turn_count += 1
-    store._raw_token_count += turn.token_count
+    # Add to the store without compressing; evicted turns wait in its pending buffer
+    store.ingest_turn(turn, compress=False)
 
     await send_all("log", {"type": "ok", "text": f"Turn #{turn.index} · {turn.token_count} tokens · in hot tier"})
     await send_all("state", get_state())
     await asyncio.sleep(0.2)
 
-    # If eviction happened, collect ALL pending evictions and compress
-    if evicted_turn is not None:
-        # Drain the evicted queue (includes the one we just got back)
-        pending = store.hot.drain_evicted()
-        if not pending:
-            pending = [evicted_turn]
-
+    # If turns were evicted, compress ALL pending ones
+    pending = store.get_pending_turns()
+    if pending:
         await send_all("log", {"type": "warn", "text": f"Hot tier full — {len(pending)} turn(s) evicted → starting compression..."})
         await asyncio.sleep(0.15)
         await send_all("log", {"type": "info", "text": "Chunker: embedding with SBERT · grouping by cosine similarity..."})
@@ -184,7 +175,7 @@ async def process_user_turn(text: str, turn_index: int = None, total: int = None
 
         engine.summarizer.annotate_chunks(chunks)
         nodes = engine.merger.merge(chunks)
-        store.warm.upsert_many(nodes)
+        store.store_nodes(nodes, pending)
 
         await send_all("log", {"type": "ok", "text": f"{len(nodes)} MemoryNode(s) → SQLite warm tier"})
         await send_all("state", get_state())
@@ -230,15 +221,10 @@ async def run_simulation(ws: WebSocket):
                 from cce_core.ingestion.segmenter import Turn as TurnObj
                 import uuid
                 from datetime import datetime, timezone
-                buf_a = manager._turn_buffers.get(SESSION_ID, [])
                 at = TurnObj(turn_id=str(uuid.uuid4()), role="assistant", content=content,
                     token_count=max(1, round(len(content.split())/0.75)),
-                    timestamp=datetime.now(timezone.utc), index=len(buf_a))
-                buf_a.append(at)
-                manager._turn_buffers[SESSION_ID] = buf_a
-                store_a.hot.push(at)
-                store_a._turn_count += 1
-                store_a._raw_token_count += at.token_count
+                    timestamp=datetime.now(timezone.utc), index=store_a.next_index)
+                store_a.ingest_turn(at, compress=False)
             await send_all("state", get_state())
             await asyncio.sleep(0.1)
 
@@ -298,16 +284,11 @@ async def ws_handler(ws: WebSocket):
                 import uuid
                 from datetime import datetime, timezone
                 storeR = manager.get(SESSION_ID)
-                bufR = manager._turn_buffers.get(SESSION_ID, [])
-                at2 = TurnObj(turn_id=str(uuid.uuid4()), role="assistant", content=response,
-                    token_count=max(1, round(len(response.split())/0.75)),
-                    timestamp=datetime.now(timezone.utc), index=len(bufR))
-                bufR.append(at2)
-                manager._turn_buffers[SESSION_ID] = bufR
                 if storeR:
-                    storeR.hot.push(at2)
-                    storeR._turn_count += 1
-                    storeR._raw_token_count += at2.token_count
+                    at2 = TurnObj(turn_id=str(uuid.uuid4()), role="assistant", content=response,
+                        token_count=max(1, round(len(response.split())/0.75)),
+                        timestamp=datetime.now(timezone.utc), index=storeR.next_index)
+                    storeR.ingest_turn(at2, compress=False)
                 await send_all("log", {"type": "ok", "text": "Gemma 4 responded"})
                 await send_all("state", get_state())
                 await send_all("chat_msg", {"role": "assistant", "content": response, "simulated": False})

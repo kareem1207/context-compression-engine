@@ -72,6 +72,7 @@ _SPEAKER_RE = re.compile(r"^(user|human|assistant|ai|system)\s*:\s*", re.IGNOREC
 def segment(
     messages: list[dict] | str,
     session_id: str | None = None,
+    start_index: int = 0,
 ) -> list[Turn]:
     """
     Convert raw messages into a list of Turn objects.
@@ -80,9 +81,10 @@ def segment(
         messages: Either a list of {"role", "content"} dicts, or a plain
                   string where each line is a turn (role auto-detected).
         session_id: Optional — attached to each turn's metadata.
+        start_index: Index of the first turn (a session that already holds turns continues from here).
 
     Returns:
-        Ordered list of Turn objects, index 0 = oldest.
+        Ordered list of Turn objects, oldest first.
     """
     if isinstance(messages, str):
         messages = _parse_plain_text(messages)
@@ -108,7 +110,7 @@ def segment(
 
     # Re-index after filtering empty turns
     for i, t in enumerate(turns):
-        t.index = i
+        t.index = start_index + i
 
     return turns
 
@@ -117,11 +119,14 @@ def segment_incremental(
     new_message: dict,
     existing_turns: list[Turn],
     session_id: str | None = None,
+    index: int | None = None,
 ) -> Turn:
     """
     Add a single new message to an existing list of turns.
     Used in stateful mode — called after every new message arrives.
     Mutates existing_turns in place and returns the new Turn.
+    `index` overrides the default position (len(existing_turns)); a session restored after a
+    restart passes its persisted next index so numbering never starts over.
     """
     role = _normalize_role(new_message.get("role", "user"))
     content = (new_message.get("content") or "").strip()
@@ -132,7 +137,7 @@ def segment_incremental(
         content=content,
         token_count=tokenizer.count(content),
         timestamp=datetime.now(timezone.utc),
-        index=len(existing_turns),
+        index=len(existing_turns) if index is None else index,
         metadata={"session_id": session_id} if session_id else {},
     )
     existing_turns.append(turn)
