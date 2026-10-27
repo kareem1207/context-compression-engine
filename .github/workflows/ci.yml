@@ -37,6 +37,24 @@ jobs:
           /tmp/clean/bin/cce-ui --help
           /tmp/clean/bin/python -I -c "import cce_core, cce_mcp.server, cce_rest.app, cce_ui; from importlib.resources import files; assert files('cce_ui').joinpath('dashboard.html').is_file()"
 
+  recall-gate:
+    # Model-free recall on real chat text with the neural embedder. It fails when CCE stops finding the
+    # facts it used to find (it would have caught the token-counter regression that cost 8 of 96 questions).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Cache the embedding model and the chat data
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-all-MiniLM-L6-v2-ultrachat
+      - run: uv sync --group bench
+      - name: Recall, 3 pinned conversations (seeds 508-510; seed 510 holds the message that broke it)
+        run: uv run --group bench python benchmarks/retrieval_recall.py --conversations 3 --seed-start 508 --top-k 5 --variants cce,cce_hash --min cce=0.95 --min cce_hash=0.5
+      - name: Live sessions, 2 pinned conversations (one-shot, live, restart, crash)
+        run: uv run --group bench python benchmarks/retrieval_live.py --conversations 2 --seed-start 509 --top-k 5 --modes oneshot,live,live_restart,live_crash --min oneshot=0.95 --min live=0.95 --min live_restart=0.9 --min live_crash=0.95
+
   javascript:
     runs-on: ubuntu-latest
     defaults:

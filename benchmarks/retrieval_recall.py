@@ -28,6 +28,25 @@ def present(context: str, keys: list[str]) -> bool:
     return all(k.lower() in text for k in keys)
 
 
+def parse_minimums(items: list[str]) -> dict[str, float]:
+    """['cce=0.95', 'live=0.9'] -> {'cce': 0.95, 'live': 0.9}"""
+    out = {}
+    for item in items:
+        name, _, value = item.partition("=")
+        out[name] = float(value)
+    return out
+
+
+def check_minimums(minimums: dict[str, float], scores: dict[str, float]) -> None:
+    """Exit with status 1 if any named score is below its minimum (used by the CI recall gate)."""
+    failed = [f"{n}: {scores.get(n, 0.0):.0%} < {m:.0%}" for n, m in minimums.items() if scores.get(n, 0.0) < m]
+    if failed:
+        print("RECALL GATE FAILED: " + "; ".join(failed), flush=True)
+        raise SystemExit(1)
+    if minimums:
+        print("recall gate passed: " + ", ".join(f"{n} >= {m:.0%}" for n, m in minimums.items()), flush=True)
+
+
 def rag_context(engine, messages, query, hot, budget_tokens):
     """Plain RAG baseline: the most similar raw turns that fit the budget, plus the last `hot` turns."""
     import numpy as np
@@ -55,6 +74,8 @@ def main() -> None:
     ap.add_argument("--top-k", type=int, default=3)
     ap.add_argument("--meso", type=int, default=150)
     ap.add_argument("--variants", default="cce,cce_hash,cce_plain")
+    ap.add_argument("--min", action="append", default=[], metavar="VARIANT=FRACTION",
+                    help="exit with status 1 if the variant finds fewer facts than this fraction (CI gate); repeatable")
     args = ap.parse_args()
 
     dialogues = dataset_real.load_dialogues()
@@ -93,9 +114,11 @@ def main() -> None:
         tot = sum(x[0] for x in h.values())
         print(f"  {v:<10} {tot}/{total_q} ({tot / total_q:.0%})  lexical {h['lexical'][0]}/{h['lexical'][1]}  "
               f"paraphrase {h['paraphrase'][0]}/{h['paraphrase'][1]}  mean context tokens {round(sum(sizes[v]) / len(sizes[v]))}")
+    scores = {v: sum(x[0] for x in hits[v].values()) / total_q for v in variants}
     rt = sum(x[0] for x in rag.values())
     print(f"  {'rag_turns':<10} {rt}/{total_q} ({rt / total_q:.0%})  lexical {rag['lexical'][0]}/{rag['lexical'][1]}  "
           f"paraphrase {rag['paraphrase'][0]}/{rag['paraphrase'][1]}  (plain RAG over raw turns, same token budget as the first variant)")
+    check_minimums(parse_minimums(args.min), scores)
 
 
 if __name__ == "__main__":

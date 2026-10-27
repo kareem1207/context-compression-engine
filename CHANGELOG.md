@@ -24,6 +24,10 @@ Security and packaging
 Details in longer messages
 - A fact buried in a multi-sentence message could be lost once its turn was compressed, because topics only quoted a one-line summary per message. The original text of compressed turns is now kept in SQLite (`turns` table, state `done`), and a matching topic quotes the best-matching sentences of its messages (plus a neighbouring sentence for very short ones). Setting `keep_raw_turns` / `CCE_KEEP_RAW_TURNS=0` turns this off. The data stays on the user's machine and is removed by deleting the session or the data folder; deleting a note removes the text it covered. Databases from 1.0 are upgraded in place (schema 5); their existing notes keep the old behaviour.
 
+Token counter calibration
+- The first 1.0 token estimate counted runs of one repeated character (a line of underscores in a contract template) at 2.2 characters per token: 1,711 tokens where tiktoken counts 158. One such message in the recent turns crowded the past context out of the payload and cost 8 of 96 held-out recall questions. The estimate is now the larger of the old word count and a feature estimate fitted to cl100k_base on 25,000 real chat messages plus JSON, code and CJK samples (a run of one character is one token). English chat is counted as before; the worst case against tiktoken is about 1.5x instead of 4x.
+- CI has a recall gate (`benchmarks/retrieval_recall.py` and `benchmarks/retrieval_live.py` with pinned seeds and `--min` thresholds) so a drop in recall fails the build.
+
 Session stats
 - `compression_ratio` was `raw / (note tokens + 50 per hot turn)`, a guess that could show 0.41 for a short chat, and the "note tokens" were the raw size of the turns the notes cover. Stats now use the real size of what would be sent (notes as sent + hot and pending turns): new `tokens_sent` and `tokens_saved`, `compression_ratio` is `null` when the session is not smaller than its raw text, `warm_tokens_compressed` is now the size of the notes as sent and `warm_tokens_original` the raw size they cover.
 
