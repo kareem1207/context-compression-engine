@@ -24,6 +24,11 @@ Security and packaging
 Details in longer messages
 - A fact buried in a multi-sentence message could be lost once its turn was compressed, because topics only quoted a one-line summary per message. The original text of compressed turns is now kept in SQLite (`turns` table, state `done`), and a matching topic quotes the best-matching sentences of its messages (plus a neighbouring sentence for very short ones). Setting `keep_raw_turns` / `CCE_KEEP_RAW_TURNS=0` turns this off. The data stays on the user's machine and is removed by deleting the session or the data folder; deleting a note removes the text it covered. Databases from 1.0 are upgraded in place (schema 5); their existing notes keep the old behaviour.
 
+Protecting data
+- Optional encryption at rest (extra `encrypt`, `CCE_ENCRYPTION_KEY`): AES-256-GCM over message text, note text and metadata, pins and cold-tier files, with `cce encrypt` / `cce decrypt` to convert a folder in place (the file is vacuumed afterwards so old plaintext does not stay in free pages). Vectors of notes, numbers and session ids are not encrypted.
+- `secure_delete` is on by default: forgotten notes and deleted sessions are overwritten in the database file.
+- API keys limited to sessions: `CCE_API_KEYS="key=session,prefix-*;other=*"` on the REST API and the proxy; 403 outside the key's sessions; the single `CCE_API_KEY` is unchanged.
+
 Memory management, time-aware queries, speed numbers
 - Pin text so it is sent with every context (at most a quarter of the budget); edit a note or a stored turn; forget a note or a range of turns (whole notes, with the text they covered); export a session as JSON. On REST, MCP (`cce_pin_memory`, `cce_forget_memory`, `cce_export_session`), the `cce` command (`pin`, `pins`, `unpin`, `forget`, `export`), the JS client and in the library. Schema version 6 adds the pins table and makes edited notes reach the shared search index.
 - `since`, `until` and `last_turns` limit a query to a period or to the last N turns. Notes record the time of their first and last message.
@@ -57,6 +62,7 @@ Session stats
 - `compression_ratio` was `raw / (note tokens + 50 per hot turn)`, a guess that could show 0.41 for a short chat, and the "note tokens" were the raw size of the turns the notes cover. Stats now use the real size of what would be sent (notes as sent + hot and pending turns): new `tokens_sent` and `tokens_saved`, `compression_ratio` is `null` when the session is not smaller than its raw text, `warm_tokens_compressed` is now the size of the notes as sent and `warm_tokens_original` the raw size they cover.
 
 Docs
+- Benchmarks re-run on the 1.0 code (model-free tests, speed) and the tables in `benchmarks/README.md` and the README rewritten with the version and day next to every number; claims were cut to what the tables support. New README section on when to use CCE and when plain RAG is enough.
 - README: roadmap and status updated, and a section on what the benchmarks do and do not show (they predate the live-session fix and have not been re-run).
 
 ## 0.1.0 (2026-10-12)

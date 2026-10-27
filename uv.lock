@@ -280,6 +280,9 @@ all = [
     { name = "tokenizers" },
     { name = "uvicorn" },
 ]
+encrypt = [
+    { name = "cryptography" },
+]
 mcp = [
     { name = "mcp" },
     { name = "pydantic" },
@@ -310,6 +313,7 @@ bench = [
     { name = "pyarrow" },
 ]
 dev = [
+    { name = "cryptography" },
     { name = "fastapi" },
     { name = "huggingface-hub" },
     { name = "mcp" },
@@ -324,6 +328,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "context-compression-engine", extras = ["neural", "onnx", "rest", "mcp", "ui"], marker = "extra == 'all'" },
+    { name = "cryptography", marker = "extra == 'encrypt'", specifier = ">=42" },
     { name = "fastapi", marker = "extra == 'rest'", specifier = ">=0.110" },
     { name = "fastapi", marker = "extra == 'ui'", specifier = ">=0.110" },
     { name = "httpx", specifier = ">=0.27" },
@@ -339,11 +344,12 @@ requires-dist = [
     { name = "uvicorn", marker = "extra == 'rest'", specifier = ">=0.29" },
     { name = "uvicorn", marker = "extra == 'ui'", specifier = ">=0.29" },
 ]
-provides-extras = ["neural", "onnx", "rest", "mcp", "ui", "tokens", "all"]
+provides-extras = ["neural", "onnx", "rest", "mcp", "ui", "tokens", "encrypt", "all"]
 
 [package.metadata.requires-dev]
 bench = [{ name = "pyarrow", specifier = ">=15" }]
 dev = [
+    { name = "cryptography", specifier = ">=42" },
     { name = "fastapi", specifier = ">=0.110" },
     { name = "huggingface-hub", specifier = ">=0.23" },
     { name = "mcp", specifier = ">=1.2,<2" },

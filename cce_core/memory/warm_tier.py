@@ -35,6 +35,7 @@ import numpy as np
 
 from cce_core.config import CCEConfig, DEFAULT_CONFIG
 from cce_core.compression.merger import MemoryNode, merge_nodes
+from cce_core.crypto import open_cipher
 from cce_core.memory import index as index_module
 
 
@@ -177,7 +178,12 @@ class WarmTier:
         self._init_schema()
         from cce_core.memory.turn_log import TurnLog
         self.turn_log = TurnLog(self)
+        with self._lock:
+            has_data = bool(self._conn.execute("SELECT 1 FROM memory_nodes LIMIT 1").fetchone()
+                            or self._conn.execute("SELECT 1 FROM turns LIMIT 1").fetchone())
+        self.cipher = open_cipher(config.base_dir, config.encryption_key, create=not has_data)
         self.index = index_module.acquire(self._db_path)   # shared by every WarmTier on this data dir
+        self.index.cipher = self.cipher
 
     # ── Connection ────────────────────────────────────────────────────────────
 
@@ -186,6 +192,8 @@ class WarmTier:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")   # concurrent reads during writes
         conn.execute("PRAGMA synchronous=NORMAL")
+        if self.config.secure_delete:
+            conn.execute("PRAGMA secure_delete=ON")
         return conn
 
     def _init_schema(self):
@@ -291,14 +299,20 @@ class WarmTier:
                 self._enforce_limit(sid)
             self._commit()
 
-    @staticmethod
-    def _node_row(n: MemoryNode) -> tuple:
+    def seal(self, text: str) -> str:
+        """Text as stored: encrypted when the folder is."""
+        return self.cipher.encrypt(text) if self.cipher else text
+
+    def unseal(self, text: str) -> str:
+        return self.cipher.decrypt(text) if self.cipher else text
+
+    def _node_row(self, n: MemoryNode) -> tuple:
         return (
-            n.node_id, n.chunk_id, n.session_id, n.topic_label,
-            n.meso_summary, json.dumps(n.micro_summaries),
+            n.node_id, n.chunk_id, n.session_id, self.seal(n.topic_label),
+            self.seal(n.meso_summary), self.seal(json.dumps(n.micro_summaries)),
             n.turn_start, n.turn_end, n.token_count,
             _emb_to_blob(n.embedding), n.created_at.isoformat(),
-            json.dumps(n.metadata),
+            self.seal(json.dumps(n.metadata)),
         )
 
     # ── Limit ─────────────────────────────────────────────────────────────────
@@ -473,7 +487,7 @@ class WarmTier:
         with self._lock:
             self._conn.execute(
                 "INSERT INTO pins (pin_id, session_id, text, source, created_at) VALUES (?,?,?,?,?)",
-                (pin_id, session_id, text, source, datetime.now(timezone.utc).isoformat()),
+                (pin_id, session_id, self.seal(text), source, datetime.now(timezone.utc).isoformat()),
             )
             self._commit()
         return pin_id
@@ -484,11 +498,11 @@ class WarmTier:
                 "SELECT pin_id, text, source, created_at FROM pins WHERE session_id = ? ORDER BY created_at, pin_id",
                 (session_id,),
             ).fetchall()
-        return [dict(r) for r in rows]
+        return [{**dict(r), "text": self.unseal(r["text"])} for r in rows]
 
     def update_pin(self, session_id: str, pin_id: str, text: str) -> bool:
         with self._lock:
-            cur = self._conn.execute("UPDATE pins SET text = ? WHERE pin_id = ? AND session_id = ?", (text, pin_id, session_id))
+            cur = self._conn.execute("UPDATE pins SET text = ? WHERE pin_id = ? AND session_id = ?", (self.seal(text), pin_id, session_id))
             self._commit()
         return cur.rowcount > 0
 
@@ -511,9 +525,9 @@ class WarmTier:
             ).fetchone()
             if row is None:
                 return False
-            label = topic_label if topic_label is not None else row["topic_label"]
-            summary = meso_summary if meso_summary is not None else row["meso_summary"]
-            metadata = json.loads(row["metadata"])
+            label = topic_label if topic_label is not None else self.unseal(row["topic_label"])
+            summary = meso_summary if meso_summary is not None else self.unseal(row["meso_summary"])
+            metadata = json.loads(self.unseal(row["metadata"]))
             tf = dict(metadata.get("tf") or {})
             for term, n in term_counts(f"{label} {summary}").items():
                 tf[term] = max(tf.get(term, 0), n)
@@ -521,7 +535,7 @@ class WarmTier:
             metadata["edited"] = True
             self._conn.execute(
                 "UPDATE memory_nodes SET topic_label = ?, meso_summary = ?, metadata = ? WHERE node_id = ?",
-                (label, summary, json.dumps(metadata), node_id),
+                (self.seal(label), self.seal(summary), self.seal(json.dumps(metadata)), node_id),
             )
             self._commit()
         return True
@@ -568,7 +582,7 @@ class WarmTier:
                 "SELECT topic_label, turn_start, turn_end, meso_summary, token_count FROM memory_nodes "
                 "WHERE session_id = ? ORDER BY turn_start", (session_id,)
             ).fetchall()
-        return [tuple(r) for r in rows]
+        return [(self.unseal(r[0]), r[1], r[2], self.unseal(r[3]), r[4]) for r in rows]
 
     def token_sum(self, session_id: str) -> int:
         """Total token_count of a session's notes, without loading them."""
@@ -585,21 +599,20 @@ class WarmTier:
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
-    @staticmethod
-    def _row_to_node(row: sqlite3.Row) -> MemoryNode:
+    def _row_to_node(self, row: sqlite3.Row) -> MemoryNode:
         return MemoryNode(
             node_id=row["node_id"],
             chunk_id=row["chunk_id"],
             session_id=row["session_id"],
-            topic_label=row["topic_label"],
-            meso_summary=row["meso_summary"],
-            micro_summaries=json.loads(row["micro_summaries"]),
+            topic_label=self.unseal(row["topic_label"]),
+            meso_summary=self.unseal(row["meso_summary"]),
+            micro_summaries=json.loads(self.unseal(row["micro_summaries"])),
             turn_start=row["turn_start"],
             turn_end=row["turn_end"],
             token_count=row["token_count"],
             embedding=_blob_to_emb(row["embedding"]),
             created_at=datetime.fromisoformat(row["created_at"]),
-            metadata=json.loads(row["metadata"]),
+            metadata=json.loads(self.unseal(row["metadata"])),
         )
 
     def __repr__(self):

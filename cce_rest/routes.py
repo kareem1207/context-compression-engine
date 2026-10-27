@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hmac
 import os
 from datetime import datetime
 from typing import Literal, Optional
@@ -10,16 +9,24 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from cce_core.auth import allows, configured_keys, scope_for
 from cce_core.ids import is_valid_session_id
 
-def require_key(authorization: Optional[str] = Header(default=None), x_api_key: Optional[str] = Header(default=None)):
-    """When CCE_API_KEY is set, every /v1 route needs it (Bearer token or X-API-Key header)."""
-    expected = os.getenv("CCE_API_KEY")
-    if not expected:
+
+def require_key(request: Request, authorization: Optional[str] = Header(default=None), x_api_key: Optional[str] = Header(default=None)):
+    """
+    When CCE_API_KEY or CCE_API_KEYS is set, every /v1 route needs a key (Bearer token or X-API-Key header).
+    The session patterns of the key are kept for the route (request.state.scope; None = no authentication).
+    """
+    request.state.scope = None
+    keys = configured_keys()
+    if not keys:
         return
     given = x_api_key or (authorization[7:] if authorization and authorization.lower().startswith("bearer ") else "")
-    if not given or not hmac.compare_digest(given, expected):
+    scope = scope_for(given, keys)
+    if scope is None:
         raise HTTPException(status_code=401, detail="Missing or invalid API key")
+    request.state.scope = scope
 
 
 router = APIRouter()
@@ -64,8 +71,15 @@ def _check_id(session_id: str) -> str:
     return session_id
 
 
+def _allow(request: Request, session_id: str) -> None:
+    scope = getattr(request.state, "scope", None)
+    if scope is not None and not allows(scope, session_id):
+        raise HTTPException(status_code=403, detail="This API key may not use this session")
+
+
 def _require(request: Request, session_id: str):
     _check_id(session_id)
+    _allow(request, session_id)
     if not _manager(request).exists(session_id):
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
 
@@ -86,12 +100,15 @@ def compress(body: CompressIn, request: Request):
 
 @secured.get("/v1/sessions", tags=["sessions"])
 def list_sessions(request: Request):
-    return {"sessions": _manager(request).list_sessions()}
+    scope = getattr(request.state, "scope", None)
+    sessions = _manager(request).list_sessions()
+    return {"sessions": [s for s in sessions if scope is None or allows(scope, s["session_id"])]}
 
 
 @secured.post("/v1/sessions/{session_id}/messages", tags=["sessions"], status_code=201)
 def add_messages(session_id: str, body: AddMessagesIn, request: Request):
     _check_id(session_id)
+    _allow(request, session_id)
     turns = _manager(request).add_messages(session_id, [m.model_dump() for m in body.messages])
     return {"session_id": session_id, "turns_added": len(turns)}
 

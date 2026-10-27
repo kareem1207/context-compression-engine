@@ -1,10 +1,15 @@
 # Benchmarks
 
-**The honest summary.** CCE lets a small local model answer questions about things said long ago, using about 90% fewer tokens than resending the chat, and it beats "send everything" and "send the newest messages that fit". But **a plain search over the raw messages with the same token budget finds everything just as reliably**: in the model-free checks below CCE and plain search tie (96/96 facts, and 12/12 on each multi-message task). So these tests show that CCE's *retrieval* works; they do **not** show that its topic structure or summaries beat ordinary retrieval, and on overview questions ("what did we talk about?") it first did worse than plain search before a fix brought it level. On the one test that went against CCE (answers spread over several messages) it first lost badly, which we fixed; it now only ties. We have not tested the cases where summaries should matter (see [What is not tested](#what-is-not-tested)).
+CCE 1.0 (release branch), re-measured on 2026-10-21 (model-free tests and speed) and on 2026-10-27 (language-model runs), with the earlier runs kept beside the new ones. Every number below says which version and which day produced it; numbers from an older version are marked as such and were not re-run.
 
-**Version note.** These results were produced with one-shot mode (the whole conversation compressed in one call), before the 1.0 fix that makes live sessions (MCP, REST) group topics the same way. They have not been re-run for 1.0.
+**The honest summary.**
+- CCE lets a small local model answer questions about things said long ago with about 87% fewer tokens than resending the whole chat (762 against 5,667 tokens in the latest fit run), and it beat "send everything" and "send the newest messages that fit" in every language-model run (tables below). How many questions it answered fell between runs (79%, 71%, 58% on chats that fit the window), and the cause is not known; see the note under the first table.
+- **A plain search over the raw messages with the same token budget finds single facts just as reliably.** In the model-free tests CCE and plain search tie on facts (96/96 each) and on lists and corrections (12/12 each). These tests show that CCE's retrieval works; they do not show that its topic structure beats ordinary retrieval for finding facts.
+- On overview questions ("what did we talk about?") CCE is ahead of plain search on the same budget on one set of conversations (36/60 against 29/60 with all six topics covered), but on a second, held-out set the two tie (12/60 each).
+- With the neural English embedder CCE finds every planted fact; with the dependency-free hashing embedder it finds 61%; with the multilingual ONNX embedder it finds every fact in English, Spanish, Hindi and Chinese in our small test.
+- The language-model results are small (24 questions per cell) and on two local models. Read [what is not tested](#what-is-not-tested).
 
-All tests use local models through llama.cpp on a laptop CPU (AMD Ryzen 7 7730U, no GPU), temperature 0, thinking mode off.
+Hardware for everything: AMD Ryzen 7 7730U laptop (16 logical cores), Windows 11, Python 3.12, no GPU. Language models run through llama.cpp, temperature 0, thinking mode off.
 
 ## How the tests work
 
@@ -20,101 +25,143 @@ Prompts compared for the same question:
 | **cce** | CCE's context: best-matching topic blocks plus the last 4 turns (neural embedder) |
 | **cce_hash** | the same, with the dependency-free hashing embedder |
 
-## Results
+## Language-model results
 
-### Chats that fit the model's window (about 5,300 tokens, context 8,192)
+### DeepSeek-Coder 6.7B, chats that fit the window (about 5,300 tokens, context 8,192; 3 conversations x 8 questions)
 
-DeepSeek-Coder 6.7B Instruct, 3 conversations x 8 questions = 24 questions:
+| Condition | CCE 0.1.0 (2026-10-12, published) | CCE 1.0, code of PR #13 (2026-10-20) | CCE 1.0 final code (2026-10-27) |
+|---|---|---|---|
+| full | 10 / 24 (42%), 5,910 tokens | 10 / 24 (42%), 5,821 tokens | 7 / 24 (29%), 5,667 tokens |
+| recent (same budget as CCE) | 0 / 24 (0%), 641 tokens | 0 / 24 (0%), 610 tokens | 0 / 24 (0%), 709 tokens |
+| **CCE** | **19 / 24 (79%)**, 697 tokens | **17 / 24 (71%)**, 681 tokens | **14 / 24 (58%), 762 tokens** |
+| CCE, hashing embedder | 11 / 24 (46%), 851 tokens | 12 / 24 (50%), 876 tokens | 11 / 24 (46%), 850 tokens |
 
-| Condition | Correct | Mean prompt tokens |
+In the 2026-10-20 run, split by question type: lexical questions CCE 100%, full 83%; paraphrased questions CCE 42%, full 0%. More context made this model worse, not better: with the whole chat in the prompt it got fewer answers right than with CCE's short context. CCE used 88% fewer tokens than the full chat (681 against 5,821). The 1.0 column was measured before the token-estimate fix (which at that time cost 8 of 96 questions in the model-free recall test); it was not re-run on the final code.
+
+On the final code (2026-10-27) CCE answered fewer questions than in the two earlier runs. Read this with three facts. The three runs do not use the same 24 questions: conversations are cut to a token budget, and the token counter changed between them. With 24 questions one answer is 4 points, so a difference of three answers is within the noise of one model on one machine. And in the model-free check of the same conversations and settings (`retrieval_recall.py --conversations 3 --seed-start 500 --top-k 3`) the needed fact was in CCE's context for 23 of the 24 questions, so most of the lost answers are the 6.7B model not using a fact that was there (for example, it replies that it has no access to earlier messages). By question type on 2026-10-27: lexical 83% (full 58%), paraphrased 33% (full 0%). We have not found out why the answer rate fell; it is the open item in this write-up. CCE still answered about twice as many questions as sending the whole chat, with 87% fewer tokens (762 against 5,667).
+
+### DeepSeek-Coder 6.7B, chats longer than the window (about 9,300 tokens, context 4,096; 3 conversations x 8 questions)
+
+| Condition | CCE 0.1.0 (2026-10-12, published) | CCE 1.0, code of PR #13 (2026-10-20, run log) | CCE 1.0 final code (2026-10-27) |
+|---|---|---|---|
+| window (newest turns that fit) | 1 / 24 (4%) | 3 / 24 (12%) | 4 / 24 (17%), 3,599 tokens |
+| recent (same budget as CCE) | 0 / 24 | 1 / 24 (4%) | 1 / 24 (4%), 824 tokens |
+| **CCE** | **18 / 24 (75%)** | **18 / 24 (75%)** | **19 / 24 (79%), 843 tokens** |
+| CCE, hashing embedder | 12 / 24 (50%) | 9 / 16 (56%), the run stopped before the last conversation | 11 / 24 (46%), 990 tokens |
+
+Gemma 4 E4B (2 conversations x 8 questions, chats longer than a 3,300-token window):
+
+| Condition | CCE 0.1.0 (2026-10-12, published) | CCE 1.0 final code (2026-10-27) |
 |---|---|---|
-| full | 10 / 24 (42%) | 5,910 |
-| recent (same budget as CCE) | 0 / 24 (0%) | 641 |
-| **CCE** | **19 / 24 (79%)** | **697** |
-| CCE, hashing embedder | 11 / 24 (46%) | 851 |
+| window (newest turns that fit) | 1 / 16 (6%), 3,184 tokens | 5 / 16 (31%), 3,148 tokens |
+| recent (same budget as CCE) | 0 / 16 | 0 / 16, 650 tokens |
+| **CCE** | **16 / 16 (100%)**, 687 tokens | **16 / 16 (100%)**, 720 tokens |
+| CCE, hashing embedder | 8 / 16 (50%) | 8 / 16 (50%), 892 tokens |
 
-More context made this model worse, not better: with the whole chat in the prompt it got fewer answers right than with CCE's short context.
+Mean CCE prompt size in the DeepSeek 0.1.0 runs was 778 tokens, against 3,675 for the window. This is the case CCE is for: the model cannot see most of the chat, and CCE brings back the relevant part. The raw per-question answers are in `results/`: the 0.1.0 runs, the 2026-10-20 fit run (`deepseek-coder-6.7b-fit-v1.0-2026-10-20.json`) and the 2026-10-27 runs (`*-2026-10-27.json`).
 
-### Chats longer than the window (about 9,300 tokens, context 4,096)
+## Model-free results (CCE 1.0 code, 2026-10-21)
 
-| Model | window | recent | **CCE** | CCE hashing |
+These need no language model: does the context CCE builds contain the fact (or topic) needed? Fast and exact, so they run on many conversations. Plain RAG is the best-matching raw messages under the same token budget.
+
+### Held-out recall: 12 conversations not used while developing (seeds 500 to 511), 96 questions
+
+`uv run --group bench python benchmarks/retrieval_recall.py --conversations 12 --seed-start 500 --top-k 5 --variants cce,cce_hash,cce_onnx`
+
+| Method | Fact present | Lexical | Paraphrase | Mean context tokens |
 |---|---|---|---|---|
-| DeepSeek-Coder 6.7B (24 questions) | 1 / 24 (4%) | 0 / 24 | **18 / 24 (75%)** | 12 / 24 (50%) |
-| Gemma 4 E4B (16 questions) | 1 / 16 (6%) | 0 / 16 | **16 / 16 (100%)** | 8 / 16 (50%) |
+| CCE, MiniLM (neural, English) | **96 / 96** | 48 / 48 | 48 / 48 | 947 |
+| CCE, multilingual ONNX | **96 / 96** | 48 / 48 | 48 / 48 | 1,032 |
+| CCE, hashing embedder | 59 / 96 (61%) | 48 / 48 | 11 / 48 | 1,140 |
+| Plain RAG over raw messages, same budget as the first row | 96 / 96 | 48 / 48 | 48 / 48 | same |
 
-Mean CCE prompt size: 778 and 687 tokens, against 3,675 and 3,184 for the window. This is the case CCE is for: the model cannot see most of the chat, and CCE brings back the relevant part.
+Plain RAG matches CCE. The hashing embedder needs no downloads and finds every lexical question but almost no paraphrased one (it matches shared words).
 
-### Model-free check: is the needed fact in the context?
+How this number moved during the 1.0 work (same command, MiniLM): 0.1.0 96/96; the first 1.0 code 88/96; after the token-estimate fix 96/96. The cause of the dip was one message made of long runs of underscores that the new token counter counted at 1,711 tokens (158 by cl100k_base), which crowded the past context out of the payload. A CI job now runs a pinned part of this test and fails below a threshold, so this cannot slip again.
 
-96 questions on 12 conversations that were **not used while developing** (seeds 500 to 511). No LLM involved, so it is fast and exact.
+### Facts buried inside longer messages (live sessions, `retrieval_live.py`, 6 conversations, 48 questions)
 
-| Method | Fact present | Mean context tokens |
+`uv run --group bench python benchmarks/retrieval_live.py --conversations 6 --top-k 5`
+
+| Mode | Fact present (lexical / paraphrase) |
+|---|---|
+| one-shot (stateless processor) | 48 / 48 (24 / 24) |
+| live: messages added one by one | 48 / 48 (24 / 24) |
+| live, after close and reopen with a new engine | 47 / 48 (24 / 23) |
+| live, after a simulated crash (no close) | 48 / 48 (24 / 24) |
+| facts buried in a long message, live after reopen | 47 / 48 (24 / 23) |
+| facts buried in a long message, one-shot | 48 / 48 (24 / 24) |
+
+Before the sentence index the buried rows were 33/48 (23 / 10) and 34/48 (19 / 15).
+
+### Answers spread over several messages (`retrieval_multi.py --top-k 5`, 12 conversations per task)
+
+| Task | CCE | Plain RAG |
 |---|---|---|
-| CCE (neural embedder), first version | 95 / 96 (99%) | 611 |
-| **CCE after the multi-message fix** (top 5 topics, several quotes per topic) | **96 / 96 (100%)** | 831 |
-| CCE, detail-aware summaries switched off | 95 / 96 (99%) | 607 |
-| CCE, hashing embedder | 53 / 96 (55%): lexical 48/48, paraphrase 5/48 | 752 |
-| **Plain RAG over raw messages, same budget** | **96 / 96 (100%)** | same as CCE |
+| List built over 4 consecutive exchanges | 12 / 12 | 12 / 12 |
+| List with items scattered through the chat | 12 / 12 | 12 / 12 |
+| Value stated, then corrected later (new value present) | 12 / 12 | 12 / 12 |
 
-Findings:
-- Turn-level retrieval is what makes CCE find facts: ranking topics only by their average vector missed 5 of 32 on the first look (84%), judging topics by their best-matching message fixed that (32 of 32 on those conversations, 99% on the held-out ones).
-- The detail-aware summariser made no measurable difference here, because facts are recovered by retrieval and quoting, not by summarising.
-- The hashing embedder needs no downloads but only matches shared words: perfect on lexical questions, almost useless on paraphrased ones.
-- **Plain RAG matches CCE.** On "find one stated fact" tasks, CCE adds nothing over simply retrieving the best raw messages.
+### Overview questions: "what did we talk about?" (`retrieval_overview.py --top-k 5`, 20 conversations x 3 phrasings = 60 questions)
 
-### Answers spread over several messages (model-free)
+Each conversation is six real dialogues back to back; a topic counts as covered if the context mentions any of three rare words of its first message. Plain RAG gets the same token budget as CCE.
 
-The case where plain search was expected to struggle less than CCE's summaries: a list built up one message at a time, and a value that is stated and later corrected. 12 conversations per task, chats of about 5,000 tokens, same token budget for both methods:
+| Set | Method | Topics covered | All six covered | Mean context tokens |
+|---|---|---|---|---|
+| seeds 900 to 919 (the set the overview mode was tuned on) | **CCE** | 88% | **36 / 60** | 1,577 |
+| | plain RAG, same budget | 85% | 29 / 60 | 1,492 |
+| | CCE + session summary | 90% | 36 / 60 | 1,954 |
+| | plain RAG, that larger budget | 90% | 39 / 60 | 1,841 |
+| seeds 1000 to 1019 (held out) | CCE | 80% | 12 / 60 | 1,593 |
+| | plain RAG, same budget | 79% | 12 / 60 | 1,500 |
 
-| Task | CCE, first version | **CCE, fixed** | Plain RAG |
+On the tuned set CCE is ahead of plain RAG at the same budget; on the held-out set they tie, so do not read the first set as a general advantage. Before the overview change CCE scored 32/60 on seeds 900 to 919 with 1,787 tokens. Adding the session summary does not help CCE (36 against 36). The coverage measure has a ceiling: its keywords come from the unclipped first message, so a perfect context covers all six topics in only 14 of the 20 conversations (42 of 60 questions) on seeds 900 to 919.
+
+### Other languages (`retrieval_multilingual.py --seeds 5`)
+
+Hand-written conversations in Spanish, Hindi and Chinese (English as a control), four planted facts each, asked as paraphrases in the same language; 20 questions per language.
+
+| Embedder | Spanish | Hindi | Chinese | English | Spanish + Hindi + Chinese |
+|---|---|---|---|---|---|
+| multilingual ONNX | 20 / 20 | 20 / 20 | 20 / 20 | 20 / 20 | **60 / 60** |
+| MiniLM (English) | 18 / 20 | 15 / 20 | 16 / 20 | 20 / 20 | 49 / 60 |
+| hashing | 17 / 20 | 4 / 20 | 2 / 20 | 4 / 20 | 23 / 60 |
+
+This set is small and easy (conversations of about 24 turns, shared-script filler); it shows the model works in these languages, not how it ranks at scale.
+
+### Speed and size (`performance.py`, 2026-10-21)
+
+1,000 real chat messages ingested live one by one, then 100 queries (see the README for what is measured and the breakdown):
+
+| Embedder | Messages ingested per second | Query p50 / p95 (ms) | Database growth (MB per 1,000 messages) |
 |---|---|---|---|
-| List built over 4 consecutive exchanges | 2 / 12 | **12 / 12** | 12 / 12 |
-| List with items scattered through the chat | 1 / 12 | **12 / 12** | 12 / 12 |
-| Value stated, then corrected later (new value present) | 12 / 12 | **12 / 12** | 12 / 12 |
+| hashing | 166 | 16.5 / 22.6 | 7.6 |
+| multilingual ONNX | 6.1 | 44.8 / 159.2 | 6.4 |
+| MiniLM | 8.9 | 63.1 / 151.0 | 6.4 |
 
-This test found a real flaw. CCE sent topic summaries plus one quoted message per topic, and extractive summaries dropped list items, so it lost almost every list. The fix: when a topic matches, also quote every message in it that matches nearly as well as the best one, and retrieve the top 5 topics instead of 3. That repaired lists, at the price of a larger context (about 830 tokens instead of 610). It makes CCE equal to plain search here, not better.
-
-Note: the language-model results above were produced **before** this fix (3 topics, one quote each). They have not been re-run.
-
-### Overview questions: "what did we talk about?" (model-free)
-
-Nothing in such a question matches a single message, so this is where topic summaries were expected to help. 20 conversations x 3 phrasings = 60 questions. Each conversation is six real dialogues back to back (six topics); a topic counts as covered if the context mentions any of its three rare keywords. Plain RAG gets the same token budget as CCE.
-
-| Method | Topics covered | All six covered | Mean context tokens |
-|---|---|---|---|
-| CCE, first version (5 closest topics) | 60% | 1 / 60 | 1,140 |
-| Plain RAG, same budget | 77% | 18 / 60 | 1,088 |
-| **CCE with overview mode** (every topic, compact) | **87%** | **31 / 60** | 1,809 |
-| Plain RAG, same budget | 89% | 37 / 60 | 1,716 |
-| CCE + session summary | 87% | 31 / 60 | 2,198 |
-| Plain RAG, same budget | 91% | 42 / 60 | 1,991 |
-
-Predicted going in: CCE would clearly win here. **It did not.** The first version lost because it only sent the 5 closest topics and an overview question matches none of them; plain search happens to spread across the whole chat. Overview mode (recognise recap-style questions and send every topic in order) closed the gap, but CCE still only ties plain search, and the context grew by about 60% to get there. The coverage measure favours raw text (it looks for words from the first message of each topic, which raw quoting includes), so this slightly flatters plain search.
-
-**Bottom line of all the model-free tests: CCE ties plain search over raw messages.** What CCE adds is the packaging (sessions, hot/warm/cold memory, persistence, an MCP server, a REST API, a JavaScript client, a compact context format) and not a measured quality advantage. A language-model test of summary questions is unlikely to change that unless the summaries themselves are written by a model, which we have not tried.
-
-### Earlier, smaller run (12 questions, one hand-written chat)
-
-Gemma 11/12 with the whole chat and 11/12 with CCE; DeepSeek 7/12 and 8/12; newest-turns-only 0/12 for both. Kept in `results/gemma4-e4b.json` and `results/deepseek-coder-6.7b.json`. `results/v1-invalid-harness/` is a first attempt that wrongly showed CCE at 25%: the model's thinking mode used up the token limit and returned empty answers. That was a flaw in the test, not in CCE; it is kept on purpose.
+Search index memory: 383 MB for 10,000 synthetic notes. Ingestion with a neural embedder is slow (6 to 9 messages per second here) and has not been optimised.
 
 ## What is not tested
 
-- **Questions that need a written summary.** We tested overview questions model-free (above) but not with a language model judging answers, and CCE's summaries are picked sentences, not written text. A model-written summariser (`summarizer_mode="llm"`) is untested.
+- **Questions that need a written summary.** Overview questions were tested model-free, not with a language model judging answers, and CCE's summaries are picked sentences, not written text. The model-written summariser (`summarizer_mode="llm"`) is experimental and untested.
 - **Messy real conversations.** Filler is real text, but the facts are planted statements. Real chats have corrections, references like "that one" and facts spread across many turns.
-- **Much longer chats**, hosted models, other languages, and larger sample sizes. 16 to 24 questions per cell is small: one question is 4 to 6 percentage points, so differences of one or two questions are noise.
-- **Speed.** Prompt-processing time depends on the server: Gemma 4 cannot reuse a cached prompt, DeepSeek can. The token saving is real in both cases; the time saving depends on your setup.
-- **The language model summariser** (`summarizer_mode="llm"`).
+- **Much longer chats**, hosted models, and larger sample sizes. 16 to 24 questions per language-model cell is small: one question is 4 to 6 percentage points, so differences of one or two questions are noise. The Gemma run has two conversations.
+- **Only two local models, one run each.** The language-model tables come from single runs of DeepSeek-Coder 6.7B and Gemma 4 E4B on 2026-10-27 (the final code) with the earlier runs beside them. We did not repeat runs to measure run-to-run spread, and we have not tried a hosted or larger model.
+- **Speed on other hardware**, and long-running servers (memory growth over days).
 
 ## Reproduce
 
 ```bash
 uv sync --group bench
-# model-free recall (fast, no LLM)
-uv run python benchmarks/retrieval_recall.py --conversations 12 --variants cce,cce_hash
-uv run python benchmarks/retrieval_multi.py --conversations 12 --top-k 5
-uv run python benchmarks/retrieval_overview.py --conversations 20
-# model benchmarks: needs llama.cpp and two GGUF files, about two hours on a CPU
+# model-free (fast, no language model; needs the MiniLM and ONNX models cached, HF_HUB_OFFLINE=1 after the first run)
+uv run --group bench python benchmarks/retrieval_recall.py --conversations 12 --seed-start 500 --top-k 5 --variants cce,cce_hash,cce_onnx
+uv run --group bench python benchmarks/retrieval_multi.py --top-k 5
+uv run --group bench python benchmarks/retrieval_overview.py --top-k 5            # add --seed 1000 for the held-out set
+uv run --group bench python benchmarks/retrieval_live.py --conversations 6 --top-k 5
+uv run --group bench python benchmarks/retrieval_multilingual.py --seeds 5
+uv run --group bench python benchmarks/performance.py --embedders hash,onnx,neural
+# language models: needs llama.cpp and two GGUF files, a few hours on a CPU
 bash benchmarks/run_all_v2.sh              # or: RUNS="overflow" bash benchmarks/run_all_v2.sh
 ```
 
-Data is deterministic per seed (`dataset_real.py`). Raw per-question answers are in `results/`.
+Data is deterministic per seed (`dataset_real.py`, `dataset_multilingual.py`). The CI job `recall-gate` runs pinned parts of the recall, live-session and multilingual tests and fails if recall drops below a threshold. Raw per-question answers are in `results/`.

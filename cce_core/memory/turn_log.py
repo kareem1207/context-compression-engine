@@ -77,8 +77,8 @@ class TurnLog:
             return
         rows = [
             (
-                session_id, t.index, t.turn_id, t.role, t.content, t.token_count,
-                t.timestamp.isoformat(), state, json.dumps(t.metadata),
+                session_id, t.index, t.turn_id, t.role, self._warm.seal(t.content), t.token_count,
+                t.timestamp.isoformat(), state, self._warm.seal(json.dumps(t.metadata)),
             )
             for t in turns
         ]
@@ -130,7 +130,7 @@ class TurnLog:
         with self._warm._lock:
             cur = self._conn.execute(
                 "UPDATE turns SET content = ?, token_count = ? WHERE session_id = ? AND idx = ?",
-                (content, token_count, session_id, idx))
+                (self._warm.seal(content), token_count, session_id, idx))
             self._warm._commit()
         return cur.rowcount > 0
 
@@ -152,7 +152,7 @@ class TurnLog:
                 f"SELECT idx, content FROM turns WHERE session_id = ? AND idx IN ({','.join('?' * len(indexes))})",
                 [session_id, *indexes],
             ).fetchall()
-        return {r["idx"]: r["content"] for r in rows}
+        return {r["idx"]: self._warm.unseal(r["content"]) for r in rows}
 
     def count(self, session_id: str, state: str) -> int:
         with self._warm._lock:
@@ -166,7 +166,7 @@ class TurnLog:
             rows = self._conn.execute(
                 "SELECT idx, role, content, token_count, timestamp, state FROM turns WHERE session_id = ? ORDER BY idx",
                 (session_id,)).fetchall()
-        return [{"index": r["idx"], "role": r["role"], "content": r["content"], "tokens": r["token_count"],
+        return [{"index": r["idx"], "role": r["role"], "content": self._warm.unseal(r["content"]), "tokens": r["token_count"],
                  "timestamp": r["timestamp"], "state": r["state"]} for r in rows]
 
     def load_all(self, session_id: str) -> list[Turn]:
@@ -177,8 +177,8 @@ class TurnLog:
                 "WHERE session_id = ? ORDER BY idx", (session_id,),
             ).fetchall()
         return [
-            Turn(turn_id=r["turn_id"], role=r["role"], content=r["content"], token_count=r["token_count"],
-                 timestamp=datetime.fromisoformat(r["timestamp"]), index=r["idx"], metadata=json.loads(r["metadata"]))
+            Turn(turn_id=r["turn_id"], role=r["role"], content=self._warm.unseal(r["content"]), token_count=r["token_count"],
+                 timestamp=datetime.fromisoformat(r["timestamp"]), index=r["idx"], metadata=json.loads(self._warm.unseal(r["metadata"])))
             for r in rows
         ]
 
@@ -191,9 +191,9 @@ class TurnLog:
             ).fetchall()
         return [
             Turn(
-                turn_id=r["turn_id"], role=r["role"], content=r["content"],
+                turn_id=r["turn_id"], role=r["role"], content=self._warm.unseal(r["content"]),
                 token_count=r["token_count"], timestamp=datetime.fromisoformat(r["timestamp"]),
-                index=r["idx"], metadata=json.loads(r["metadata"]),
+                index=r["idx"], metadata=json.loads(self._warm.unseal(r["metadata"])),
             )
             for r in rows
         ]
